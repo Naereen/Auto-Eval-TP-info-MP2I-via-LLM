@@ -742,7 +742,7 @@ def render_bareme_mode(tp_name: str) -> None:
         if uniform_points_input_key not in st.session_state:
             st.session_state[uniform_points_input_key] = DEFAULT_QUESTION_POINTS
 
-        if st.button("Appliquer un même barème à toutes les questions", use_container_width=True):
+        if st.button("Appliquer un même barème à toutes les questions", width='stretch'):
             st.session_state[uniform_points_state_key] = not st.session_state[uniform_points_state_key]
 
         if st.session_state[uniform_points_state_key]:
@@ -755,7 +755,7 @@ def render_bareme_mode(tp_name: str) -> None:
                     key=uniform_points_input_key,
                 )
             )
-            if st.button("Valider la mise à jour globale", type="primary", use_container_width=True):
+            if st.button("Valider la mise à jour globale", type="primary", width='stretch'):
                 st.session_state[uniform_points_state_key] = False
                 update_all_question_points(tp_name, uniform_points)
                 st.rerun()
@@ -898,7 +898,7 @@ def render_submissions_mode(tp_name: str) -> None:
                 }
                 st.session_state[get_grading_session_key(tp_name, selected_student_name)] = grading_data
 
-                if st.button("Sauvegarder la notation", type="primary", use_container_width=True):
+                if st.button("Sauvegarder la notation", type="primary", width='stretch'):
                     save_grading_data(selected_student_dir, grading_data)
                     read_text_file.clear()
                     st.success(f"Notation sauvegardée dans {get_notes_path(selected_student_dir).name}.")
@@ -1013,8 +1013,8 @@ def render_classroom_mode(tp_name: str) -> None:
                 )
                 .properties(height=320)
             )
-            st.altair_chart(notes_chart, use_container_width=True)
-            st.dataframe(student_notes_rows, use_container_width=True, hide_index=True)
+            st.altair_chart(notes_chart, width='stretch')
+            st.dataframe(student_notes_rows, width='stretch', hide_index=True)
 
     with chart_col_right:
         st.subheader("Moyenne par question vs barème")
@@ -1029,7 +1029,7 @@ def render_classroom_mode(tp_name: str) -> None:
 
     st.subheader("Statistiques détaillées par question")
     if per_question_rows:
-        st.dataframe(per_question_rows, use_container_width=True, hide_index=True)
+        st.dataframe(per_question_rows, width='stretch', hide_index=True)
 
     with st.expander("Afficher le sujet du TP pour contextualiser la vue de classe"):
         render_subject_panel(tp_name)
