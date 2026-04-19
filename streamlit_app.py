@@ -223,6 +223,26 @@ def get_grading_points_widget_key(tp_name: str, student_name: str, question_inde
     return f"grading_points::{tp_name}::{student_name}::{question_index}"
 
 
+def get_current_grading_summary(
+    tp_name: str, student_name: str | None, bareme_questions: list[dict[str, object]]
+) -> tuple[int, int, float]:
+    """Compute the current grading summary from the widget state for one student."""
+    total_points_bareme = sum(get_question_points(question) for question in bareme_questions)
+    if not student_name or not bareme_questions:
+        return 0, total_points_bareme, 0.0
+
+    total_points = 0
+    for question in bareme_questions:
+        question_index = get_question_index(question)
+        widget_key = get_grading_points_widget_key(tp_name, student_name, question_index)
+        raw_grade = st.session_state.get(widget_key, 0)
+        grade = int(raw_grade) if isinstance(raw_grade, (int, float)) else 0
+        total_points += max(0, min(get_question_points(question), grade))
+
+    note_sur_20 = round(20 * total_points / float(total_points_bareme), 2) if total_points_bareme else 0.0
+    return total_points, total_points_bareme, note_sur_20
+
+
 def get_bareme_data(tp_name: str) -> dict[str, object]:
     """Return the current in-session marking scheme for a practical session."""
     session_key = get_bareme_session_key(tp_name)
@@ -465,7 +485,6 @@ def render_submissions_mode(tp_name: str) -> None:
     student_names = [path.name for path in student_dirs]
     bareme_data = get_bareme_data(tp_name)
     bareme_questions = get_bareme_questions(bareme_data)
-    total_points_bareme = sum(get_question_points(question) for question in bareme_questions)
     selected_student_name = st.sidebar.selectbox(
         "Choisir un rendu étudiant",
         student_names,
@@ -477,14 +496,20 @@ def render_submissions_mode(tp_name: str) -> None:
     if selected_student_name:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
+    total_points, total_points_bareme, note_sur_20 = get_current_grading_summary(
+        tp_name, selected_student_name, bareme_questions
+    )
+
     st.title(f"Évaluation des rendus de TP - `{tp_name}`")
     st.caption(
         "Mode d'évaluation des rendus pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
     )
-    col_tp, col_rendus, col_etudiant = st.columns(3)
-    col_tp.metric("Nom de ce TP", f"`{tp_name}`")
+    col_rendus, col_etudiant, col_total, col_note = st.columns(4)
+    # col_tp.metric("Nom de ce TP", f"`{tp_name}`")
     col_rendus.metric("Nombre de rendus détectés", len(student_dirs))
     col_etudiant.metric("Étudiant sélectionné", f"**{selected_student_name}**" or "aucun")
+    col_total.metric("Points obtenus", f"{total_points} / {total_points_bareme}")
+    col_note.metric("Note", f"{note_sur_20}/20")
 
     subject_col, grading_col, student_col = st.columns((0.7, 0.3, 0.8), gap="small")
 
@@ -506,7 +531,7 @@ def render_submissions_mode(tp_name: str) -> None:
                     max_points = get_question_points(question)
                     input_col_label, input_col_value = st.columns((2.2, 1), gap="small")
                     with input_col_label:
-                        st.markdown(f"#### {question_label}")
+                        st.markdown(f"**{question_label}**")
                     with input_col_value:
                         widget_key = get_grading_points_widget_key(tp_name, selected_student_name, question_index)
                         if widget_key not in st.session_state:
@@ -526,8 +551,6 @@ def render_submissions_mode(tp_name: str) -> None:
 
                 total_points = sum(updated_grades)
                 note_sur_20 = round(20 * total_points / float(total_points_bareme), 2) if total_points_bareme else 0.0
-                st.markdown(f"### Note : {note_sur_20}/20")
-                st.caption(f"**Total obtenu : {total_points} / {total_points_bareme} points**")
 
     with student_col:
         st.subheader("Rendu étudiant")
