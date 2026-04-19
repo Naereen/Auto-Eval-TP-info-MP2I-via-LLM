@@ -218,6 +218,11 @@ def get_bareme_points_widget_key(tp_name: str, question_index: int) -> str:
     return f"bareme_points::{tp_name}::{question_index}"
 
 
+def get_grading_points_widget_key(tp_name: str, student_name: str, question_index: int) -> str:
+    """Return the widget key used by the grading editor for one student question."""
+    return f"grading_points::{tp_name}::{student_name}::{question_index}"
+
+
 def get_bareme_data(tp_name: str) -> dict[str, object]:
     """Return the current in-session marking scheme for a practical session."""
     session_key = get_bareme_session_key(tp_name)
@@ -458,6 +463,9 @@ def render_submissions_mode(tp_name: str) -> None:
     """Render the original submission review workflow for a practical session."""
     student_dirs = discover_student_dirs(tp_name)
     student_names = [path.name for path in student_dirs]
+    bareme_data = get_bareme_data(tp_name)
+    bareme_questions = get_bareme_questions(bareme_data)
+    total_points_bareme = sum(get_question_points(question) for question in bareme_questions)
     selected_student_name = st.sidebar.selectbox(
         "Choisir un rendu étudiant",
         student_names,
@@ -478,50 +486,87 @@ def render_submissions_mode(tp_name: str) -> None:
     col_rendus.metric("Nombre de rendus détectés", len(student_dirs))
     col_etudiant.metric("Étudiant sélectionné", f"**{selected_student_name}**" or "aucun")
 
-    subject_col, student_col = st.columns((1.1, 1), gap="large")
+    subject_col, grading_col, student_col = st.columns((0.7, 0.3, 0.8), gap="small")
 
     with subject_col:
         render_subject_panel(tp_name)
+
+    with grading_col:
+        st.subheader("Évaluation")
+        with st.container(height=720):
+            if selected_student_dir is None:
+                st.info("Sélectionnez un rendu étudiant pour saisir l'évaluation question par question.")
+            elif not bareme_questions:
+                st.warning("Aucun barème n'est disponible pour ce TP. Commencez par renseigner le mode « 1 - Barème ».")
+            else:
+                updated_grades: list[int] = []
+                for question in bareme_questions:
+                    question_index = get_question_index(question)
+                    question_label = get_question_label(question)
+                    max_points = get_question_points(question)
+                    input_col_label, input_col_value = st.columns((2.2, 1), gap="small")
+                    with input_col_label:
+                        st.markdown(f"#### {question_label}")
+                    with input_col_value:
+                        widget_key = get_grading_points_widget_key(tp_name, selected_student_name, question_index)
+                        if widget_key not in st.session_state:
+                            st.session_state[widget_key] = 0
+                        grade = int(
+                            st.number_input(
+                                f"Points pour {question_label}",
+                                min_value=0,
+                                max_value=max_points,
+                                step=1,
+                                key=widget_key,
+                                label_visibility="collapsed",
+                            )
+                        )
+                    updated_grades.append(grade)
+                    st.caption(f"Maximum : {max_points} point{'s' if max_points > 1 else ''}")
+
+                total_points = sum(updated_grades)
+                note_sur_20 = round(20 * total_points / float(total_points_bareme), 2) if total_points_bareme else 0.0
+                st.markdown(f"### Note : {note_sur_20}/20")
+                st.caption(f"**Total obtenu : {total_points} / {total_points_bareme} points**")
 
     with student_col:
         st.subheader("Rendu étudiant")
         if selected_student_dir is None:
             st.info("Aucun rendu étudiant disponible pour ce TP.")
-            return
+        else:
+            code_path = find_student_code(selected_student_dir)
+            report_pdf = find_student_report_pdf(selected_student_dir)
+            report_md = find_student_report_markdown(selected_student_dir)
 
-        code_path = find_student_code(selected_student_dir)
-        report_pdf = find_student_report_pdf(selected_student_dir)
-        report_md = find_student_report_markdown(selected_student_dir)
+            tabs = st.tabs(["Code source", "Compte-rendu PDF", "Compte-rendu brut", "Fichiers rendus"])
 
-        tabs = st.tabs(["Code source", "Compte-rendu PDF", "Compte-rendu brut", "Fichiers rendus"])
+            with tabs[0]:
+                if code_path is None:
+                    st.warning("Aucun fichier source rendu n'a été trouvé.")
+                else:
+                    code = read_text_file(str(code_path))
+                    st.code(code, language=detect_language(code_path), line_numbers=True, height=720)
+                    st.caption(f"Fichier affiché : {code_path.name}")
 
-        with tabs[0]:
-            if code_path is None:
-                st.warning("Aucun fichier source rendu n'a été trouvé.")
-            else:
-                code = read_text_file(str(code_path))
-                st.code(code, language=detect_language(code_path), line_numbers=True, height=720)
-                st.caption(f"Fichier affiché : {code_path.name}")
+            with tabs[1]:
+                if report_pdf is not None:
+                    render_pdf(report_pdf, height=720)
+                    st.caption(f"Compte-rendu PDF affiché : {report_pdf.name}")
+                else:
+                    st.warning("Aucun compte-rendu PDF n'a été trouvé.")
 
-        with tabs[1]:
-            if report_pdf is not None:
-                render_pdf(report_pdf, height=720)
-                st.caption(f"Compte-rendu PDF affiché : {report_pdf.name}")
-            else:
-                st.warning("Aucun compte-rendu PDF n'a été trouvé.")
+            with tabs[2]:
+                if report_md is not None:
+                    with st.container(height=720):
+                        st.markdown(read_text_file(str(report_md)))
+                    st.caption(f"Fichier affiché : {report_md.name}")
+                else:
+                    st.warning("Aucun compte-rendu Markdown n'a été trouvé.")
 
-        with tabs[2]:
-            if report_md is not None:
-                with st.container(height=720):
-                    st.markdown(read_text_file(str(report_md)))
-                st.caption(f"Fichier affiché : {report_md.name}")
-            else:
-                st.warning("Aucun compte-rendu Markdown n'a été trouvé.")
-
-        with tabs[3]:
-            for path in sorted(selected_student_dir.iterdir(), key=lambda item: item.name.lower()):
-                label = "Dossier" if path.is_dir() else "Fichier"
-                st.write(f"- {label} : `{path.name}`")
+            with tabs[3]:
+                for path in sorted(selected_student_dir.iterdir(), key=lambda item: item.name.lower()):
+                    label = "Dossier" if path.is_dir() else "Fichier"
+                    st.write(f"- {label} : `{path.name}`")
 
 
 def render_placeholder_mode(tp_name: str, mode_name: str) -> None:

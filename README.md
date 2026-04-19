@@ -13,6 +13,8 @@ Premier jet disponible : un dashboard Streamlit en Python 3 permet de
 - appliquer rapidement une même valeur à toutes les questions du barème à l'aide d'un bouton dédié et d'un unique champ numérique ;
 - faire défiler la liste des questions du barème dans une zone dédiée, tout en gardant le sujet PDF visible dans la colonne de gauche ;
 - utiliser le mode `Évaluation des rendus` pour sélectionner un rendu étudiant dans `rendus-des-etudiants/<tp>/` ;
+- utiliser le barème défini dans le mode `Barème` pour saisir, question par question, les points attribués à un rendu étudiant ;
+- calculer automatiquement le total obtenu et afficher une note sur 20 dans la colonne d'évaluation ;
 - afficher le code source rendu (`code_rendu.c` ou `code_rendu.ml`) avec coloration syntaxique ;
 - afficher le compte-rendu PDF de l'étudiant, avec repli sur le Markdown si le PDF n'existe pas encore.
 
