@@ -1,6 +1,16 @@
 # TODO
 
-## DONE: Tester la coloration syntaxique
+## Fonctionnalités supplémentaires
+
+- TODO: Je veux pouvoir supporter des TP qui demanderaient des rendus de code source en *plusieurs fichiers*.
+
+- TODO: amélioration du mode barème : calcul automatique d'un barème question par question, par un/des appels à un LLM/IA, depuis la lecture automatique du sujet (LaTeX ou PDF) ;
+
+- TODO: l'analyse du code et du compte-rendu (Markdown ou PDF) de chaque étudiant, pour l'évaluer semi-automatiquement par des appels à un LLM/IA,
+
+- TODO: l'ajout de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
+
+-----------------------------------------------------
 
 ## Tester le mode Barème
 
@@ -14,6 +24,10 @@
 - Vérifier que chaque question reprend bien le maximum défini dans le barème du TP.
 - Vérifier que le total obtenu et la note sur 20 se mettent à jour après chaque saisie.
 - Vérifier que le changement d'étudiant conserve une saisie indépendante pour chaque rendu.
+- Vérifier la sauvegarde de `notes.json` dans le dossier de rendu de l'étudiant.
+- Vérifier le rechargement automatique de `notes.json` lors du retour sur un rendu déjà évalué.
+
+-----------------------------------------------------
 
 ## Maintenir la documentation
 

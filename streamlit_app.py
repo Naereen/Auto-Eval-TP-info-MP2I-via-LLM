@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+#-*- coding: utf-8 -*-
 """Streamlit dashboard used to inspect TP subjects and student submissions.
 
 The app discovers available practical sessions from the repository layout,
