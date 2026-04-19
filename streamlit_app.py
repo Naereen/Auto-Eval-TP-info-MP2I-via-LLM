@@ -8,6 +8,7 @@ associated report when available.
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 
 import streamlit as st
@@ -21,6 +22,13 @@ SUBMISSIONS_DIR = ROOT_DIR / "rendus-des-etudiants"
 CODE_CANDIDATES = ("code_rendu.c", "code_rendu.ml")
 REPORT_PDF_CANDIDATES = ("compte-rendu.pdf", "compte_rendu.pdf")
 REPORT_MD_CANDIDATES = ("compte-rendu.md", "compte_rendu.md")
+BAREME_FILENAME = "bareme.json"
+APP_MODES = (
+    "Barème",
+    "Évaluation des rendus",
+    "Vue de la classe",
+    "Statistiques de cohorte",
+)
 
 
 def list_subdirectories(directory: Path) -> list[Path]:
@@ -28,6 +36,16 @@ def list_subdirectories(directory: Path) -> list[Path]:
     if not directory.exists():
         return []
     return sorted((path for path in directory.iterdir() if path.is_dir()), key=lambda path: path.name.lower())
+
+
+def get_subject_dir(tp_name: str) -> Path:
+    """Return the directory storing assets for the selected practical session."""
+    return SUBJECTS_DIR / tp_name
+
+
+def get_bareme_path(tp_name: str) -> Path:
+    """Return the JSON file used to persist the marking scheme for a practical session."""
+    return get_subject_dir(tp_name) / BAREME_FILENAME
 
 
 @st.cache_data(show_spinner=True)
@@ -39,7 +57,7 @@ def discover_tp_names() -> list[str]:
 @st.cache_data(show_spinner=True)
 def find_subject_pdf(tp_name: str) -> Path | None:
     """Find the main PDF for a given practical session."""
-    tp_dir = SUBJECTS_DIR / tp_name
+    tp_dir = get_subject_dir(tp_name)
     preferred = sorted(tp_dir.glob("tp-*.pdf"))
     if preferred:
         return preferred[0]
@@ -54,7 +72,7 @@ def find_subject_pdf(tp_name: str) -> Path | None:
 @st.cache_data(show_spinner=True)
 def find_subject_tex_files(tp_name: str) -> list[Path]:
     """List LaTeX sources associated with a practical session."""
-    tp_dir = SUBJECTS_DIR / tp_name
+    tp_dir = get_subject_dir(tp_name)
     return sorted(tp_dir.glob("*.tex"))
 
 
@@ -115,6 +133,142 @@ def read_binary_file(path: str) -> bytes:
     return Path(path).read_bytes()
 
 
+def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]:
+    """Create an in-memory marking scheme with numbered questions and zeroed scores."""
+    questions = [
+        {"index": index, "label": f"Question {index}", "points": 0}
+        for index in range(1, question_count + 1)
+    ]
+    return {
+        "format_version": 1,
+        "tp_name": tp_name,
+        "question_count": question_count,
+        "questions": questions,
+    }
+
+
+def normalize_bareme_data(tp_name: str, data: dict[str, object] | None) -> dict[str, object]:
+    """Sanitize loaded JSON data and rebuild a consistent marking scheme structure."""
+    if not isinstance(data, dict):
+        return build_default_bareme(tp_name, 1)
+
+    raw_question_count = data.get("question_count", 1)
+    question_count = raw_question_count if isinstance(raw_question_count, int) else 1
+    question_count = max(1, question_count)
+
+    raw_questions = data.get("questions", [])
+    normalized_questions: list[dict[str, object]] = []
+    if isinstance(raw_questions, list):
+        for index, question in enumerate(raw_questions[:question_count], start=1):
+            points = 0
+            label = f"Question {index}"
+            if isinstance(question, dict):
+                raw_points = question.get("points", 0)
+                raw_label = question.get("label", label)
+                if isinstance(raw_points, (int, float)):
+                    points = int(max(0, min(100, raw_points)))
+                if isinstance(raw_label, str) and raw_label.strip():
+                    label = raw_label
+            normalized_questions.append({"index": index, "label": label, "points": points})
+
+    for index in range(len(normalized_questions) + 1, question_count + 1):
+        normalized_questions.append({"index": index, "label": f"Question {index}", "points": 0})
+
+    return {
+        "format_version": 1,
+        "tp_name": tp_name,
+        "question_count": question_count,
+        "total_points": sum(get_question_points(question) for question in normalized_questions),
+        "questions": normalized_questions,
+    }
+
+
+def load_bareme(tp_name: str) -> dict[str, object]:
+    """Load a saved marking scheme from disk, or create a default one when absent."""
+    bareme_path = get_bareme_path(tp_name)
+    if not bareme_path.exists():
+        return build_default_bareme(tp_name, 1)
+
+    try:
+        loaded_data = json.loads(read_text_file(str(bareme_path)))
+    except (OSError, json.JSONDecodeError):
+        return build_default_bareme(tp_name, 1)
+
+    return normalize_bareme_data(tp_name, loaded_data if isinstance(loaded_data, dict) else None)
+
+
+def save_bareme(tp_name: str, bareme_data: dict[str, object]) -> None:
+    """Persist the current marking scheme as formatted JSON in the subject directory."""
+    bareme_path = get_bareme_path(tp_name)
+    bareme_to_save = normalize_bareme_data(tp_name, bareme_data)
+    bareme_path.write_text(json.dumps(bareme_to_save, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def get_bareme_session_key(tp_name: str) -> str:
+    """Return the Streamlit session key used to store a TP-specific marking scheme."""
+    return f"bareme::{tp_name}"
+
+
+def get_bareme_data(tp_name: str) -> dict[str, object]:
+    """Return the current in-session marking scheme for a practical session."""
+    session_key = get_bareme_session_key(tp_name)
+    if session_key not in st.session_state:
+        st.session_state[session_key] = load_bareme(tp_name)
+    return normalize_bareme_data(tp_name, st.session_state[session_key])
+
+
+def get_bareme_question_count(bareme_data: dict[str, object]) -> int:
+    """Extract a validated question count from a normalized marking scheme."""
+    raw_question_count = bareme_data.get("question_count", 1)
+    return raw_question_count if isinstance(raw_question_count, int) else 1
+
+
+def get_bareme_questions(bareme_data: dict[str, object]) -> list[dict[str, object]]:
+    """Extract the normalized list of questions from a marking scheme."""
+    raw_questions = bareme_data.get("questions", [])
+    return raw_questions if isinstance(raw_questions, list) else []
+
+
+def get_question_index(question: dict[str, object]) -> int:
+    """Extract a validated question index from a normalized question entry."""
+    raw_index = question.get("index", 0)
+    return raw_index if isinstance(raw_index, int) else 0
+
+
+def get_question_label(question: dict[str, object]) -> str:
+    """Extract a display label from a normalized question entry."""
+    raw_label = question.get("label", "")
+    return raw_label if isinstance(raw_label, str) else ""
+
+
+def get_question_points(question: dict[str, object]) -> int:
+    """Extract a validated integer score from a normalized question entry."""
+    raw_points = question.get("points", 0)
+    return int(raw_points) if isinstance(raw_points, (int, float)) else 0
+
+
+def update_bareme_question_count(tp_name: str, question_count: int) -> dict[str, object]:
+    """Resize the in-session marking scheme while preserving existing point allocations."""
+    bareme_data = get_bareme_data(tp_name)
+    existing_questions = bareme_data.get("questions", [])
+    existing_points: list[int] = []
+    if isinstance(existing_questions, list):
+        for question in existing_questions:
+            if isinstance(question, dict) and isinstance(question.get("points"), (int, float)):
+                existing_points.append(int(max(0, min(100, question["points"]))))
+
+    resized_bareme = build_default_bareme(tp_name, question_count)
+    questions = resized_bareme["questions"]
+    if isinstance(questions, list):
+        for index, question in enumerate(questions):
+            if index < len(existing_points):
+                question["points"] = existing_points[index]
+
+    session_key = get_bareme_session_key(tp_name)
+    st.session_state[session_key] = resized_bareme
+    return resized_bareme
+
+
 def render_pdf(path: Path, height: int = 780) -> None:
     """Embed a local PDF in the Streamlit page through a data URL."""
     encoded = base64.b64encode(read_binary_file(str(path))).decode("ascii")
@@ -138,36 +292,96 @@ def detect_language(path: Path) -> str:
     return "text"
 
 
-def render_header(tp_name: str, student_name: str | None, student_count: int) -> None:
-    """Render the page title and the key metrics for the current selection."""
-    st.title("Dashboard d'évaluation des rendus de TP d'informatique en MP2I @ Lycée Kléber (Lilian BESSON)")
-    st.caption(
-        "Premier jet Streamlit pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
-    )
-    col_tp, col_rendus, col_etudiant = st.columns(3)
-    col_tp.metric("TP", tp_name)
-    col_rendus.metric("Rendus détectés", student_count)
-    col_etudiant.metric("Étudiant sélectionné", student_name or "aucun")
+def render_subject_panel(tp_name: str) -> None:
+    """Render the subject PDF and LaTeX metadata for the selected practical session."""
+    subject_pdf = find_subject_pdf(tp_name)
+    tex_files = find_subject_tex_files(tp_name)
+
+    st.subheader("Sujet du TP")
+    if subject_pdf is not None:
+        render_pdf(subject_pdf, height=820)
+        st.caption(f"PDF détecté : {subject_pdf.name}")
+    else:
+        st.warning("Aucun PDF de sujet n'a été trouvé pour ce TP.")
+
+    if tex_files:
+        tex_names = ", ".join(path.name for path in tex_files)
+        st.caption(f"Sources LaTeX détectées : {tex_names}")
 
 
-def main() -> None:
-    """Build the Streamlit interface and wire repository discovery to UI widgets."""
-    st.set_page_config(
-        page_title="Auto-Eval TP MP2I @ Lycée Kléber (Lilian BESSON)",
-        page_icon="📚",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
+def render_bareme_mode(tp_name: str) -> None:
+    """Render the marking scheme editor and persist it in the session state."""
+    bareme_data = get_bareme_data(tp_name)
+    question_count = get_bareme_question_count(bareme_data)
+    questions = get_bareme_questions(bareme_data)
+    total_points = sum(get_question_points(question) for question in questions)
 
-    tp_names = discover_tp_names()
-    if not tp_names:
-        st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
-        return
+    subject_col, bareme_col = st.columns((1.1, 1), gap="large")
 
-    st.sidebar.title("Navigation")
-    selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
+    with subject_col:
+        render_subject_panel(tp_name)
 
-    student_dirs = discover_student_dirs(selected_tp)
+    with bareme_col:
+        st.subheader("Conception et écriture du Barème")
+        summary_col_questions, summary_col_total = st.columns(2)
+        summary_col_questions.metric("Nombre de questions", question_count)
+        summary_col_total.metric("Total de points", total_points)
+
+        requested_question_count = int(
+            st.number_input(
+                "Nombre de questions",
+                min_value=1,
+                max_value=100,
+                value=question_count,
+                step=1,
+                help="Ajuste le nombre de questions à noter pour le TP courant.",
+            )
+        )
+
+        if requested_question_count != question_count:
+            bareme_data = update_bareme_question_count(tp_name, requested_question_count)
+            question_count = get_bareme_question_count(bareme_data)
+            questions = get_bareme_questions(bareme_data)
+
+        updated_questions: list[dict[str, object]] = []
+        for question in questions:
+            if not isinstance(question, dict):
+                continue
+            question_index = get_question_index(question)
+            label = get_question_label(question)
+            points = int(
+                st.number_input(
+                    f"{label}",
+                    min_value=0,
+                    max_value=100,
+                    value=get_question_points(question),
+                    step=1,
+                    key=f"bareme_points::{tp_name}::{question_index}",
+                )
+            )
+            updated_questions.append({"index": question_index, "label": label, "points": points})
+
+        bareme_data = {
+            "format_version": 1,
+            "tp_name": tp_name,
+            "question_count": question_count,
+            "total_points": sum(get_question_points(question) for question in updated_questions),
+            "questions": updated_questions,
+        }
+        st.session_state[get_bareme_session_key(tp_name)] = bareme_data
+
+        total_points = sum(get_question_points(question) for question in updated_questions)
+        st.caption(f"Barème courant : {question_count} questions, {total_points} points au total.")
+
+        if st.button("Sauvegarder le barème", type="primary"):
+            save_bareme(tp_name, bareme_data)
+            read_text_file.clear()
+            st.success(f"Barème sauvegardé dans {get_bareme_path(tp_name).name}.")
+
+
+def render_submissions_mode(tp_name: str) -> None:
+    """Render the original submission review workflow for a practical session."""
+    student_dirs = discover_student_dirs(tp_name)
     student_names = [path.name for path in student_dirs]
     selected_student_name = st.sidebar.selectbox(
         "Choisir un rendu étudiant",
@@ -180,24 +394,19 @@ def main() -> None:
     if selected_student_name:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
-    render_header(selected_tp, selected_student_name, len(student_dirs))
-
-    subject_pdf = find_subject_pdf(selected_tp)
-    tex_files = find_subject_tex_files(selected_tp)
+    st.title("Dashboard d'évaluation des rendus de TP d'informatique en MP2I @ Lycée Kléber (Lilian BESSON)")
+    st.caption(
+        "Mode d'évaluation des rendus pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
+    )
+    col_tp, col_rendus, col_etudiant = st.columns(3)
+    col_tp.metric("TP", tp_name)
+    col_rendus.metric("Rendus détectés", len(student_dirs))
+    col_etudiant.metric("Étudiant sélectionné", selected_student_name or "aucun")
 
     subject_col, student_col = st.columns((1.1, 1), gap="large")
 
     with subject_col:
-        st.subheader("Sujet du TP")
-        if subject_pdf is not None:
-            render_pdf(subject_pdf, height=820)
-            st.caption(f"PDF détecté : {subject_pdf.name}")
-        else:
-            st.warning("Aucun PDF de sujet n'a été trouvé pour ce TP.")
-
-        if tex_files:
-            tex_names = ", ".join(path.name for path in tex_files)
-            st.caption(f"Sources LaTeX détectées : {tex_names}")
+        render_subject_panel(tp_name)
 
     with student_col:
         st.subheader("Rendu étudiant")
@@ -235,12 +444,50 @@ def main() -> None:
                 label = "Dossier" if path.is_dir() else "Fichier"
                 st.write(f"- {label}: {path.name}")
 
+
+def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
+    """Render a placeholder for future dashboard modes that are not implemented yet."""
+    st.title("Dashboard d'évaluation et de pilotage des TP")
+    st.caption("Cette vue est réservée aux prochains développements du dashboard.")
+    col_mode, col_tp = st.columns(2)
+    col_mode.metric("Mode", mode_name)
+    col_tp.metric("TP", tp_name)
+    st.info(f"Le mode « {mode_name} » sera ajouté dans une prochaine version.")
+
+
+def main() -> None:
+    """Build the Streamlit interface and wire repository discovery to UI widgets."""
+    st.set_page_config(
+        page_title="Auto-Eval TP MP2I @ Lycée Kléber (Lilian BESSON)",
+        page_icon="📚",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    tp_names = discover_tp_names()
+    if not tp_names:
+        st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
+        return
+
+    st.sidebar.title("Navigation")
+    selected_mode = st.sidebar.selectbox("Choisir un mode", APP_MODES, index=0)
+    selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
+
+    if selected_mode == "Barème":
+        st.title("Dashboard de conception et d'écriture du Barème")
+        st.caption("Mode de préparation du barème du TP sélectionné, avec sauvegarde locale par sujet.")
+        render_bareme_mode(selected_tp)
+    elif selected_mode == "Évaluation des rendus":
+        render_submissions_mode(selected_tp)
+    else:
+        render_placeholder_mode(selected_tp, selected_mode)
+
     st.divider()
     st.markdown(
         """
         ### Suite prévue
-        L'étape suivante sera d'ajouter la lecture automatique du sujet, des fichiers de correction,
-        puis l'analyse du code et du compte-rendu étudiant afin de produire une pré-évaluation assistée.
+        Les prochaines étapes incluent l'amélioration du mode Barème, la lecture automatique du sujet,
+        l'analyse du code et du compte-rendu étudiant, ainsi que l'ajout de vues de classe et de statistiques.
         """
     )
 
