@@ -23,11 +23,13 @@ CODE_CANDIDATES = ("code_rendu.c", "code_rendu.ml")
 REPORT_PDF_CANDIDATES = ("compte-rendu.pdf", "compte_rendu.pdf")
 REPORT_MD_CANDIDATES = ("compte-rendu.md", "compte_rendu.md")
 BAREME_FILENAME = "bareme.json"
+DEFAULT_QUESTION_COUNT = 10
+DEFAULT_QUESTION_POINTS = 5
 APP_MODES = (
-    "Barème",
-    "Évaluation des rendus",
-    "Vue de la classe",
-    "Statistiques de cohorte",
+    "1 - Barème",
+    "2 - Évaluation des rendus",
+    "3 - Vue de la classe",
+    "4 - Statistiques de cohorte",
 )
 
 
@@ -134,9 +136,9 @@ def read_binary_file(path: str) -> bytes:
 
 
 def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]:
-    """Create an in-memory marking scheme with numbered questions and zeroed scores."""
+    """Create an in-memory marking scheme with numbered questions and default scores."""
     questions = [
-        {"index": index, "label": f"Question {index}", "points": 0}
+        {"index": index, "label": f"Question {index}", "points": DEFAULT_QUESTION_POINTS}
         for index in range(1, question_count + 1)
     ]
     return {
@@ -150,17 +152,17 @@ def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]
 def normalize_bareme_data(tp_name: str, data: dict[str, object] | None) -> dict[str, object]:
     """Sanitize loaded JSON data and rebuild a consistent marking scheme structure."""
     if not isinstance(data, dict):
-        return build_default_bareme(tp_name, 1)
+        return build_default_bareme(tp_name, DEFAULT_QUESTION_COUNT)
 
-    raw_question_count = data.get("question_count", 1)
-    question_count = raw_question_count if isinstance(raw_question_count, int) else 1
+    raw_question_count = data.get("question_count", DEFAULT_QUESTION_COUNT)
+    question_count = raw_question_count if isinstance(raw_question_count, int) else DEFAULT_QUESTION_COUNT
     question_count = max(1, question_count)
 
     raw_questions = data.get("questions", [])
     normalized_questions: list[dict[str, object]] = []
     if isinstance(raw_questions, list):
         for index, question in enumerate(raw_questions[:question_count], start=1):
-            points = 0
+            points = DEFAULT_QUESTION_POINTS
             label = f"Question {index}"
             if isinstance(question, dict):
                 raw_points = question.get("points", 0)
@@ -172,7 +174,9 @@ def normalize_bareme_data(tp_name: str, data: dict[str, object] | None) -> dict[
             normalized_questions.append({"index": index, "label": label, "points": points})
 
     for index in range(len(normalized_questions) + 1, question_count + 1):
-        normalized_questions.append({"index": index, "label": f"Question {index}", "points": 0})
+        normalized_questions.append(
+            {"index": index, "label": f"Question {index}", "points": DEFAULT_QUESTION_POINTS}
+        )
 
     return {
         "format_version": 1,
@@ -187,12 +191,12 @@ def load_bareme(tp_name: str) -> dict[str, object]:
     """Load a saved marking scheme from disk, or create a default one when absent."""
     bareme_path = get_bareme_path(tp_name)
     if not bareme_path.exists():
-        return build_default_bareme(tp_name, 1)
+        return build_default_bareme(tp_name, DEFAULT_QUESTION_COUNT)
 
     try:
         loaded_data = json.loads(read_text_file(str(bareme_path)))
     except (OSError, json.JSONDecodeError):
-        return build_default_bareme(tp_name, 1)
+        return build_default_bareme(tp_name, DEFAULT_QUESTION_COUNT)
 
     return normalize_bareme_data(tp_name, loaded_data if isinstance(loaded_data, dict) else None)
 
@@ -219,8 +223,8 @@ def get_bareme_data(tp_name: str) -> dict[str, object]:
 
 def get_bareme_question_count(bareme_data: dict[str, object]) -> int:
     """Extract a validated question count from a normalized marking scheme."""
-    raw_question_count = bareme_data.get("question_count", 1)
-    return raw_question_count if isinstance(raw_question_count, int) else 1
+    raw_question_count = bareme_data.get("question_count", DEFAULT_QUESTION_COUNT)
+    return raw_question_count if isinstance(raw_question_count, int) else DEFAULT_QUESTION_COUNT
 
 
 def get_bareme_questions(bareme_data: dict[str, object]) -> list[dict[str, object]]:
@@ -269,12 +273,21 @@ def update_bareme_question_count(tp_name: str, question_count: int) -> dict[str,
     return resized_bareme
 
 
-def render_pdf(path: Path, height: int = 780) -> None:
+def render_pdf(path: Path, height: int = 720) -> None:
     """Embed a local PDF in the Streamlit page through a data URL."""
     encoded = base64.b64encode(read_binary_file(str(path))).decode("ascii")
+
+    # On ajoute les paramètres après le base64, séparés par un '#'
+    # pagemode=none : masque le menu latéral
+    # view=FitH : ajuste à la largeur de l'iframe
+    # toolbar=1 : garde la barre d'outils (0 pour masquer)
+    pdf_params = "#pagemode=none&view=FitH&toolbar=1"
+
+    src_url = f"data:application/pdf;base64,{encoded}{pdf_params}"
+
     iframe = f"""
     <iframe
-        src="data:application/pdf;base64,{encoded}"
+        src="{src_url}"
         width="100%"
         height="{height}"
         style="border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 14px; background: white;"
@@ -311,6 +324,10 @@ def render_subject_panel(tp_name: str) -> None:
 
 def render_bareme_mode(tp_name: str) -> None:
     """Render the marking scheme editor and persist it in the session state."""
+
+    st.title(f"Conception et de sauvegarde du barème de notation - `{tp_name}`")
+    st.caption("Mode de préparation du barème du TP sélectionné, avec sauvegarde locale par sujet.")
+
     bareme_data = get_bareme_data(tp_name)
     question_count = get_bareme_question_count(bareme_data)
     questions = get_bareme_questions(bareme_data)
@@ -334,7 +351,7 @@ def render_bareme_mode(tp_name: str) -> None:
                 max_value=100,
                 value=question_count,
                 step=1,
-                help="Ajuste le nombre de questions à noter pour le TP courant.",
+                help=f"Ajuste le nombre de questions à noter pour le TP courant. La valeur par défaut est {DEFAULT_QUESTION_COUNT}.",
             )
         )
 
@@ -344,22 +361,23 @@ def render_bareme_mode(tp_name: str) -> None:
             questions = get_bareme_questions(bareme_data)
 
         updated_questions: list[dict[str, object]] = []
-        for question in questions:
-            if not isinstance(question, dict):
-                continue
-            question_index = get_question_index(question)
-            label = get_question_label(question)
-            points = int(
-                st.number_input(
-                    f"{label}",
-                    min_value=0,
-                    max_value=100,
-                    value=get_question_points(question),
-                    step=1,
-                    key=f"bareme_points::{tp_name}::{question_index}",
+        questions_container = st.container(height=550, border=True)
+        with questions_container:
+            st.caption("Édition du barème par question")
+            for question in questions:
+                question_index = get_question_index(question)
+                label = get_question_label(question)
+                points = int(
+                    st.number_input(
+                        f"{label}",
+                        min_value=0,
+                        max_value=100,
+                        value=get_question_points(question),
+                        step=1,
+                        key=f"bareme_points::{tp_name}::{question_index}",
+                    )
                 )
-            )
-            updated_questions.append({"index": question_index, "label": label, "points": points})
+                updated_questions.append({"index": question_index, "label": label, "points": points})
 
         bareme_data = {
             "format_version": 1,
@@ -394,14 +412,14 @@ def render_submissions_mode(tp_name: str) -> None:
     if selected_student_name:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
-    st.title("Dashboard d'évaluation des rendus de TP d'informatique en MP2I @ Lycée Kléber (Lilian BESSON)")
+    st.title(f"Dashboard d'évaluation des rendus de TP - `{tp_name}`")
     st.caption(
         "Mode d'évaluation des rendus pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
     )
     col_tp, col_rendus, col_etudiant = st.columns(3)
-    col_tp.metric("TP", tp_name)
-    col_rendus.metric("Rendus détectés", len(student_dirs))
-    col_etudiant.metric("Étudiant sélectionné", selected_student_name or "aucun")
+    col_tp.metric("Nom de ce TP", f"`{tp_name}`")
+    col_rendus.metric("Nombre de rendus détectés", len(student_dirs))
+    col_etudiant.metric("Étudiant sélectionné", f"**{selected_student_name}**" or "aucun")
 
     subject_col, student_col = st.columns((1.1, 1), gap="large")
 
@@ -418,31 +436,35 @@ def render_submissions_mode(tp_name: str) -> None:
         report_pdf = find_student_report_pdf(selected_student_dir)
         report_md = find_student_report_markdown(selected_student_dir)
 
-        tabs = st.tabs(["Code source", "Compte-rendu", "Fichiers"])
+        tabs = st.tabs(["Code source", "Compte-rendu PDF", "Compte-rendu brut", "Fichiers rendus"])
 
         with tabs[0]:
             if code_path is None:
                 st.warning("Aucun fichier source rendu n'a été trouvé.")
             else:
                 code = read_text_file(str(code_path))
-                st.code(code, language=detect_language(code_path), line_numbers=True)
+                st.code(code, language=detect_language(code_path), line_numbers=True, height=720)
                 st.caption(f"Fichier affiché : {code_path.name}")
 
         with tabs[1]:
             if report_pdf is not None:
                 render_pdf(report_pdf, height=720)
                 st.caption(f"Compte-rendu PDF affiché : {report_pdf.name}")
-            elif report_md is not None:
-                st.info("Aucun PDF trouvé. Affichage du compte-rendu Markdown en secours.")
-                st.markdown(read_text_file(str(report_md)))
-                st.caption(f"Fichier affiché : {report_md.name}")
             else:
-                st.warning("Aucun compte-rendu PDF ou Markdown n'a été trouvé.")
+                st.warning("Aucun compte-rendu PDF n'a été trouvé.")
 
         with tabs[2]:
+            if report_md is not None:
+                with st.container(height=720):
+                    st.markdown(read_text_file(str(report_md)))
+                st.caption(f"Fichier affiché : {report_md.name}")
+            else:
+                st.warning("Aucun compte-rendu Markdown n'a été trouvé.")
+
+        with tabs[3]:
             for path in sorted(selected_student_dir.iterdir(), key=lambda item: item.name.lower()):
                 label = "Dossier" if path.is_dir() else "Fichier"
-                st.write(f"- {label}: {path.name}")
+                st.write(f"- {label} : `{path.name}`")
 
 
 def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
@@ -469,15 +491,14 @@ def main() -> None:
         st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
         return
 
-    st.sidebar.title("Navigation")
+    st.sidebar.title("Auto-Eval TP MP2I")
+    st.sidebar.subheader("Navigation")
     selected_mode = st.sidebar.selectbox("Choisir un mode", APP_MODES, index=0)
     selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
 
-    if selected_mode == "Barème":
-        st.title("Dashboard de conception et d'écriture du Barème")
-        st.caption("Mode de préparation du barème du TP sélectionné, avec sauvegarde locale par sujet.")
+    if selected_mode == "1 - Barème":
         render_bareme_mode(selected_tp)
-    elif selected_mode == "Évaluation des rendus":
+    elif selected_mode == "2 - Évaluation des rendus":
         render_submissions_mode(selected_tp)
     else:
         render_placeholder_mode(selected_tp, selected_mode)
@@ -486,8 +507,16 @@ def main() -> None:
     st.markdown(
         """
         ### Suite prévue
-        Les prochaines étapes incluent l'amélioration du mode Barème, la lecture automatique du sujet,
+        Les prochaines étapes incluent l'amélioration du mode barème, la lecture automatique du sujet,
         l'analyse du code et du compte-rendu étudiant, ainsi que l'ajout de vues de classe et de statistiques.
+        """
+    )
+
+    st.divider()
+    st.markdown(
+        """
+        ### À propos
+        Dashboard développé par [Lilian BESSON](https://github.com/Naereen/) pour les TP de MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [License MIT](https://lbesson.mit-license.org/).
         """
     )
 

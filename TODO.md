@@ -6,6 +6,7 @@
 
 - Vérifier le rechargement automatique de `bareme.json` au redémarrage du dashboard.
 - Vérifier l'ajustement du nombre de questions sans perdre les points déjà saisis.
+- Vérifier l'ergonomie de la zone défilable quand le barème contient beaucoup de questions.
 
 ## Maintenir la documentation
 
