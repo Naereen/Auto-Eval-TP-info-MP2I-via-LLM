@@ -213,6 +213,11 @@ def get_bareme_session_key(tp_name: str) -> str:
     return f"bareme::{tp_name}"
 
 
+def get_bareme_points_widget_key(tp_name: str, question_index: int) -> str:
+    """Return the widget key used by the point editor for one question."""
+    return f"bareme_points::{tp_name}::{question_index}"
+
+
 def get_bareme_data(tp_name: str) -> dict[str, object]:
     """Return the current in-session marking scheme for a practical session."""
     session_key = get_bareme_session_key(tp_name)
@@ -273,6 +278,33 @@ def update_bareme_question_count(tp_name: str, question_count: int) -> dict[str,
     return resized_bareme
 
 
+def update_all_question_points(tp_name: str, points: int) -> dict[str, object]:
+    """Apply the same score to every question in the in-session marking scheme."""
+    bareme_data = get_bareme_data(tp_name)
+    updated_questions = []
+    for question in get_bareme_questions(bareme_data):
+        updated_questions.append(
+            {
+                "index": get_question_index(question),
+                "label": get_question_label(question),
+                "points": points,
+            }
+        )
+
+    updated_bareme = {
+        "format_version": 1,
+        "tp_name": tp_name,
+        "question_count": len(updated_questions),
+        "questions": updated_questions,
+    }
+    normalized_bareme = normalize_bareme_data(tp_name, updated_bareme)
+    st.session_state[get_bareme_session_key(tp_name)] = normalized_bareme
+    for question in get_bareme_questions(normalized_bareme):
+        question_index = get_question_index(question)
+        st.session_state[get_bareme_points_widget_key(tp_name, question_index)] = get_question_points(question)
+    return normalized_bareme
+
+
 def render_pdf(path: Path, height: int = 720) -> None:
     """Embed a local PDF in the Streamlit page through a data URL."""
     encoded = base64.b64encode(read_binary_file(str(path))).decode("ascii")
@@ -325,7 +357,7 @@ def render_subject_panel(tp_name: str) -> None:
 def render_bareme_mode(tp_name: str) -> None:
     """Render the marking scheme editor and persist it in the session state."""
 
-    st.title(f"Conception et de sauvegarde du barème de notation - `{tp_name}`")
+    st.title(f"Rédaction du barème de notation - `{tp_name}`")
     st.caption("Mode de préparation du barème du TP sélectionné, avec sauvegarde locale par sujet.")
 
     bareme_data = get_bareme_data(tp_name)
@@ -346,7 +378,7 @@ def render_bareme_mode(tp_name: str) -> None:
 
         requested_question_count = int(
             st.number_input(
-                "Nombre de questions",
+                "Choix du nombre de questions",
                 min_value=1,
                 max_value=100,
                 value=question_count,
@@ -354,6 +386,31 @@ def render_bareme_mode(tp_name: str) -> None:
                 help=f"Ajuste le nombre de questions à noter pour le TP courant. La valeur par défaut est {DEFAULT_QUESTION_COUNT}.",
             )
         )
+
+        uniform_points_state_key = f"bareme_uniform_editor::{tp_name}"
+        uniform_points_input_key = f"bareme_uniform_points::{tp_name}"
+        if uniform_points_state_key not in st.session_state:
+            st.session_state[uniform_points_state_key] = False
+        if uniform_points_input_key not in st.session_state:
+            st.session_state[uniform_points_input_key] = DEFAULT_QUESTION_POINTS
+
+        if st.button("Appliquer un même barème à toutes les questions", use_container_width=True):
+            st.session_state[uniform_points_state_key] = not st.session_state[uniform_points_state_key]
+
+        if st.session_state[uniform_points_state_key]:
+            uniform_points = int(
+                st.number_input(
+                    "Barème unique pour toutes les questions",
+                    min_value=0,
+                    max_value=100,
+                    step=1,
+                    key=uniform_points_input_key,
+                )
+            )
+            if st.button("Valider la mise à jour globale", type="primary", use_container_width=True):
+                st.session_state[uniform_points_state_key] = False
+                update_all_question_points(tp_name, uniform_points)
+                st.rerun()
 
         if requested_question_count != question_count:
             bareme_data = update_bareme_question_count(tp_name, requested_question_count)
@@ -364,17 +421,17 @@ def render_bareme_mode(tp_name: str) -> None:
         questions_container = st.container(height=550, border=True)
         with questions_container:
             st.caption("Édition du barème par question")
-            for question in questions:
+            for i, question in enumerate(questions):
                 question_index = get_question_index(question)
                 label = get_question_label(question)
                 points = int(
                     st.number_input(
-                        f"{label}",
+                        f"**{label}**",
                         min_value=0,
                         max_value=100,
                         value=get_question_points(question),
                         step=1,
-                        key=f"bareme_points::{tp_name}::{question_index}",
+                        key=get_bareme_points_widget_key(tp_name, question_index),
                     )
                 )
                 updated_questions.append({"index": question_index, "label": label, "points": points})
@@ -412,7 +469,7 @@ def render_submissions_mode(tp_name: str) -> None:
     if selected_student_name:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
-    st.title(f"Dashboard d'évaluation des rendus de TP - `{tp_name}`")
+    st.title(f"Évaluation des rendus de TP - `{tp_name}`")
     st.caption(
         "Mode d'évaluation des rendus pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
     )

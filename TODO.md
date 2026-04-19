@@ -1,11 +1,12 @@
 # TODO
 
-## Tester la coloration syntaxique
+## DONE: Tester la coloration syntaxique
 
 ## Tester le mode Barème
 
 - Vérifier le rechargement automatique de `bareme.json` au redémarrage du dashboard.
 - Vérifier l'ajustement du nombre de questions sans perdre les points déjà saisis.
+- Vérifier la mise à jour globale du barème avec une valeur unique pour toutes les questions.
 - Vérifier l'ergonomie de la zone défilable quand le barème contient beaucoup de questions.
 
 ## Maintenir la documentation
