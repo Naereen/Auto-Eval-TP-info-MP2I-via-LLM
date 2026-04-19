@@ -10,7 +10,8 @@
 
 - [x] l'ajout de vues des notes de la classe pour un TP fixé et donné.
 
-- TODO: l'ajout de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
+- [x] l'ajout d'une vue de progression annuelle individuelle au fil des TP.
+- TODO: l'ajout de statistiques de cohorte classe au fil de l'année.
 
 -----------------------------------------------------
 
@@ -35,6 +36,13 @@
 - Vérifier que les statistiques globales (moyenne, médiane, min, max, écart-type) sont cohérentes avec les notes sauvegardées.
 - Vérifier que les statistiques par question respectent bien le barème du TP courant.
 - Vérifier que les graphiques restent lisibles quand le nombre d'étudiants ou de questions augmente.
+
+## Tester le mode Progression annuelle individuelle
+
+- Vérifier que la vue n'agrège que les TP disposant d'un `notes.json` pour l'étudiant choisi.
+- Vérifier que la moyenne annuelle est bien une moyenne non pondérée des notes par TP.
+- Vérifier la cohérence des statistiques globale de l'étudiant : min, max, médiane, écart-type.
+- Vérifier que les graphiques restent lisibles quand un étudiant a beaucoup de TP notés sur l'année.
 
 -----------------------------------------------------
 

@@ -98,6 +98,16 @@ def discover_student_dirs(tp_name: str) -> list[Path]:
     return list_subdirectories(SUBMISSIONS_DIR / tp_name)
 
 
+@st.cache_data(show_spinner=True)
+def discover_all_student_names() -> list[str]:
+    """List all distinct student submission directory names across the available practical sessions."""
+    student_names: set[str] = set()
+    for tp_name in discover_tp_names():
+        for student_dir in discover_student_dirs(tp_name):
+            student_names.add(student_dir.name)
+    return sorted(student_names)
+
+
 def pick_first_existing(directory: Path, candidates: tuple[str, ...]) -> Path | None:
     """Return the first candidate filename that exists inside a directory."""
     for filename in candidates:
@@ -488,6 +498,17 @@ def get_classroom_rows(stats: dict[str, object], key: str) -> list[dict[str, obj
     return [row for row in raw_value if isinstance(row, dict)]
 
 
+def get_row_float(row: dict[str, object], key: str) -> float:
+    """Extract one float-like value from a generic row dictionary."""
+    raw_value = row.get(key, 0.0)
+    return float(raw_value) if isinstance(raw_value, (int, float)) else 0.0
+
+
+def find_student_dir_for_tp(tp_name: str, student_name: str) -> Path | None:
+    """Find a student's submission directory for one practical session."""
+    return next((path for path in discover_student_dirs(tp_name) if path.name == student_name), None)
+
+
 def build_classroom_statistics(tp_name: str, bareme_questions: list[dict[str, object]]) -> dict[str, object]:
     """Aggregate saved student grades into class-level statistics for one practical session."""
     student_dirs = discover_student_dirs(tp_name)
@@ -563,6 +584,61 @@ def build_classroom_statistics(tp_name: str, bareme_questions: list[dict[str, ob
         "totals_summary": totals_summary,
         "student_notes_rows": student_notes_rows,
         "per_question_rows": question_rows,
+    }
+
+
+def build_individual_progress_statistics(student_name: str) -> dict[str, object]:
+    """Aggregate saved grades across all practical sessions for one student."""
+    evaluated_rows: list[dict[str, object]] = []
+    pending_tp_names: list[str] = []
+    missing_submission_tp_names: list[str] = []
+
+    for tp_name in discover_tp_names():
+        student_dir = find_student_dir_for_tp(tp_name, student_name)
+        if student_dir is None:
+            missing_submission_tp_names.append(tp_name)
+            continue
+
+        bareme_data = load_bareme(tp_name)
+        bareme_questions = get_bareme_questions(bareme_data)
+        if not has_saved_grading(student_dir):
+            pending_tp_names.append(tp_name)
+            continue
+
+        grading_data = load_grading_data(tp_name, student_name, student_dir, bareme_questions)
+        raw_total_points = grading_data.get("total_points_awarded", 0)
+        raw_total_points_bareme = grading_data.get("total_points_bareme", 0)
+        raw_note_sur_20 = grading_data.get("note_sur_20", 0.0)
+        total_points = int(raw_total_points) if isinstance(raw_total_points, (int, float)) else 0
+        total_points_bareme = int(raw_total_points_bareme) if isinstance(raw_total_points_bareme, (int, float)) else 0
+        note_sur_20 = float(raw_note_sur_20) if isinstance(raw_note_sur_20, (int, float)) else 0.0
+        ratio = round(total_points / float(total_points_bareme), 3) if total_points_bareme else 0.0
+        evaluated_rows.append(
+            {
+                "TP": tp_name,
+                "Note /20": round(note_sur_20, 2),
+                "Points obtenus": total_points,
+                "Barème total": total_points_bareme,
+                "Taux de réussite": ratio,
+            }
+        )
+
+    notes = [get_row_float(row, "Note /20") for row in evaluated_rows]
+    points = [get_row_float(row, "Points obtenus") for row in evaluated_rows]
+    notes_summary = summarize_numeric_values(notes)
+    points_summary = summarize_numeric_values(points)
+    progression_delta = round(notes[-1] - notes[0], 2) if len(notes) >= 2 else 0.0
+
+    return {
+        "evaluated_tp_count": len(evaluated_rows),
+        "pending_tp_count": len(pending_tp_names),
+        "missing_submission_tp_count": len(missing_submission_tp_names),
+        "pending_tp_names": pending_tp_names,
+        "missing_submission_tp_names": missing_submission_tp_names,
+        "notes_summary": notes_summary,
+        "points_summary": points_summary,
+        "progression_delta": progression_delta,
+        "evaluated_rows": evaluated_rows,
     }
 
 
@@ -848,6 +924,7 @@ def render_submissions_mode(tp_name: str) -> None:
         elif not bareme_questions:
             st.warning("Aucun barème n'est disponible pour ce TP. Commencez par renseigner le mode « 1 - Barème ».")
         else:
+            student_identifier = selected_student_name or ""
             updated_grades: list[int] = []
             updated_questions: list[dict[str, object]] = []
             with st.container(height=720):
@@ -859,7 +936,7 @@ def render_submissions_mode(tp_name: str) -> None:
                     with input_col_label:
                         st.markdown(f"**{question_label}**")
                     with input_col_value:
-                        widget_key = get_grading_points_widget_key(tp_name, selected_student_name, question_index)
+                        widget_key = get_grading_points_widget_key(tp_name, student_identifier, question_index)
                         if widget_key not in st.session_state:
                             st.session_state[widget_key] = 0
                         grade = int(
@@ -1035,6 +1112,138 @@ def render_classroom_mode(tp_name: str) -> None:
         render_subject_panel(tp_name)
 
 
+def render_individual_progress_mode() -> None:
+    """Render an annual progress dashboard for one selected student across all practical sessions."""
+    student_names = discover_all_student_names()
+
+    st.title("Progression annuelle individuelle")
+    st.caption(
+        "Vue transversale pour suivre l'évolution d'un étudiant au fil des TP évalués pendant l'année."
+    )
+
+    if not student_names:
+        st.info("Aucun étudiant n'a encore été détecté dans les dossiers de rendus.")
+        return
+
+    selected_student_name = st.selectbox(
+        "Choisir un étudiant",
+        student_names,
+        index=0,
+        help="La progression annuelle agrège les fichiers `notes.json` déjà sauvegardés pour cet étudiant sur l'ensemble des TP.",
+    )
+
+    progress_stats = build_individual_progress_statistics(selected_student_name)
+    evaluated_tp_count = get_classroom_int(progress_stats, "evaluated_tp_count")
+    pending_tp_count = get_classroom_int(progress_stats, "pending_tp_count")
+    missing_submission_tp_count = get_classroom_int(progress_stats, "missing_submission_tp_count")
+    notes_summary = get_classroom_summary(progress_stats, "notes_summary")
+    points_summary = get_classroom_summary(progress_stats, "points_summary")
+    progression_delta = get_row_float(progress_stats, "progression_delta")
+    evaluated_rows = get_classroom_rows(progress_stats, "evaluated_rows")
+    pending_tp_names = get_classroom_str_list(progress_stats, "pending_tp_names")
+    missing_submission_tp_names = get_classroom_str_list(progress_stats, "missing_submission_tp_names")
+
+    if evaluated_tp_count == 0:
+        st.info("Aucune note sauvegardée n'a encore été trouvée pour cet étudiant sur l'année.")
+        if pending_tp_names:
+            st.caption(f"TP avec rendu mais sans évaluation sauvegardée : {', '.join(pending_tp_names)}")
+        return
+
+    summary_row_1, summary_row_2, summary_row_3, summary_row_4 = st.columns(4)
+    summary_row_1.metric("TP évalués", evaluated_tp_count)
+    summary_row_2.metric("Moyenne annuelle", f"{notes_summary['mean']}/20")
+    summary_row_3.metric("Note minimale", f"{notes_summary['min']}/20")
+    summary_row_4.metric("Note maximale", f"{notes_summary['max']}/20")
+
+    summary_row_5, summary_row_6, summary_row_7, summary_row_8 = st.columns(4)
+    summary_row_5.metric("Médiane", f"{notes_summary['median']}/20")
+    summary_row_6.metric("Écart-type", f"{notes_summary['stddev']}")
+    summary_row_7.metric("Tendance sur l'année", f"{progression_delta:+.2f}")
+    summary_row_8.metric("Moyenne en points", f"{points_summary['mean']} pts")
+
+    st.caption(
+        f"Cette vue calcule une moyenne *non pondérée* sur {evaluated_tp_count} TP noté{'s' if evaluated_tp_count > 1 else ''} pour {selected_student_name}."
+    )
+
+    status_col_left, status_col_right = st.columns((1, 1), gap="large")
+    with status_col_left:
+        if pending_tp_count:
+            preview = ", ".join(pending_tp_names[:8])
+            suffix = "..." if pending_tp_count > 8 else ""
+            st.info(f"TP déjà rendus mais encore sans `notes.json` : {preview}{suffix}")
+    with status_col_right:
+        if missing_submission_tp_count:
+            preview = ", ".join(missing_submission_tp_names[:8])
+            suffix = "..." if missing_submission_tp_count > 8 else ""
+            st.caption(f"TP sans dossier de rendu détecté : {preview}{suffix}")
+
+    charts_col_left, charts_col_right = st.columns((1.2, 1), gap="large")
+    with charts_col_left:
+        st.subheader("Trajectoire des notes au fil des TP")
+        notes_timeline_chart = (
+            alt.Chart(alt.Data(values=evaluated_rows))
+            .mark_line(point=alt.OverlayMarkDef(filled=True, size=90), strokeWidth=3)
+            .encode(
+                x=alt.X("TP:N", sort=None, title="TP"),
+                y=alt.Y("Note /20:Q", scale=alt.Scale(domain=[0, 20]), title="Note /20"),
+                color=alt.Color(
+                    "Note /20:Q",
+                    scale=alt.Scale(domain=[0, 20], range=["#c62828", "#1565c0"]),
+                    legend=None,
+                ),
+                tooltip=[
+                    alt.Tooltip("TP:N", title="TP"),
+                    alt.Tooltip("Note /20:Q", title="Note", format=".2f"),
+                    alt.Tooltip("Points obtenus:Q", title="Points"),
+                    alt.Tooltip("Barème total:Q", title="Barème total"),
+                ],
+            )
+            .properties(height=340)
+        )
+        st.altair_chart(notes_timeline_chart, width="stretch")
+
+    with charts_col_right:
+        st.subheader("Comparaison note / moyenne personnelle")
+        reference_rows: list[dict[str, object]] = []
+        personal_mean = notes_summary["mean"]
+        for row in evaluated_rows:
+            tp_name = row.get("TP", "") if isinstance(row.get("TP", ""), str) else ""
+            note_value = row.get("Note /20", 0.0)
+            reference_rows.append(
+                {
+                    "TP": tp_name,
+                    "Note /20": float(note_value) if isinstance(note_value, (int, float)) else 0.0,
+                    "Moyenne personnelle": personal_mean,
+                }
+            )
+        st.bar_chart(reference_rows, x="TP", y=["Note /20", "Moyenne personnelle"], stack=False)
+        st.caption("Chaque TP est comparé à la moyenne annuelle de l'étudiant pour repérer rapidement les hausses et les baisses.")
+
+    st.subheader("Rythme de réussite")
+    success_chart = (
+        alt.Chart(alt.Data(values=evaluated_rows))
+        .mark_area(opacity=0.55)
+        .encode(
+            x=alt.X("TP:N", sort=None, title="TP"),
+            y=alt.Y("Taux de réussite:Q", scale=alt.Scale(domain=[0, 1]), title="Taux de réussite"),
+            color=alt.Color(
+                "Taux de réussite:Q",
+                scale=alt.Scale(domain=[0, 1], range=["#ef9a9a", "#1e88e5"]),
+                legend=None,
+            ),
+            tooltip=[
+                alt.Tooltip("TP:N", title="TP"),
+                alt.Tooltip("Taux de réussite:Q", title="Taux", format=".1%"),
+            ],
+        )
+        .properties(height=220)
+    )
+    st.altair_chart(success_chart, width="stretch")
+
+    st.subheader("Historique détaillé")
+    st.dataframe(evaluated_rows, width="stretch", hide_index=True)
+
+
 def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
     """Render a placeholder for future dashboard modes that are not implemented yet."""
     st.title("Dashboard d'évaluation et de pilotage des TP")
@@ -1062,16 +1271,20 @@ def main() -> None:
     st.sidebar.title("Auto-Eval TP MP2I")
     st.sidebar.subheader("Navigation")
     selected_mode = st.sidebar.selectbox("Choisir un mode", APP_MODES, index=0)
-    selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
 
     if selected_mode == "1 - Barème":
+        selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
         render_bareme_mode(selected_tp)
     elif selected_mode == "2 - Évaluation des rendus":
+        selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
         render_submissions_mode(selected_tp)
     elif selected_mode == "3 - Vue de la classe par TP":
+        selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
         render_classroom_mode(selected_tp)
+    elif selected_mode == "4 - Progression annuelle individuelle":
+        render_individual_progress_mode()
     else:
-        render_placeholder_mode(selected_tp, selected_mode)
+        render_placeholder_mode("TP à sélectionner", selected_mode)
 
     st.divider()
     st.markdown(

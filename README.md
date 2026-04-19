@@ -19,6 +19,8 @@ Premier jet disponible : un dashboard Streamlit en Python 3 permet de
 - utiliser le mode `Vue de la classe par TP` pour synthétiser les notes déjà sauvegardées de toute la classe sur un TP donné ;
 - visualiser la moyenne générale, la médiane, le minimum, le maximum, l'écart-type, ainsi que les statistiques détaillées question par question ;
 - afficher plusieurs graphiques Streamlit directement dans le dashboard pour comparer les notes par étudiant, avec un dégradé rouge-bleu sur les notes globales, la moyenne par question et la dispersion des résultats ;
+- utiliser le mode `Progression annuelle individuelle` pour suivre, TP après TP, la trajectoire d'un étudiant sur l'ensemble de l'année ;
+- afficher pour cet étudiant sa moyenne annuelle non pondérée, ses notes minimale et maximale, sa médiane, son écart-type et une visualisation de sa tendance ;
 - afficher le code source rendu (`code_rendu.c` ou `code_rendu.ml`) avec coloration syntaxique ;
 - afficher le compte-rendu PDF de l'étudiant, avec repli sur le Markdown si le PDF n'existe pas encore.
 
