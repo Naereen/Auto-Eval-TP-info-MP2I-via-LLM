@@ -8,6 +8,8 @@
 
 - TODO: l'analyse du code et du compte-rendu (Markdown ou PDF) de chaque étudiant, pour l'évaluer semi-automatiquement par des appels à un LLM/IA,
 
+- [x] l'ajout de vues des notes de la classe pour un TP fixé et donné.
+
 - TODO: l'ajout de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
 
 -----------------------------------------------------

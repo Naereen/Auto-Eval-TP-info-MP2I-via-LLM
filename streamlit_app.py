@@ -16,7 +16,6 @@ from pathlib import Path
 
 import altair as alt
 import streamlit as st
-import streamlit.components.v1 as components
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -674,7 +673,7 @@ def render_pdf(path: Path, height: int = 720) -> None:
         style="border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 14px; background: white;"
     ></iframe>
     """
-    components.html(iframe, height=height + 20)
+    st.iframe(iframe, height=height + 30)
 
 
 def detect_language(path: Path) -> str:
@@ -1020,7 +1019,7 @@ def render_classroom_mode(tp_name: str) -> None:
     with chart_col_right:
         st.subheader("Moyenne par question vs barème")
         if per_question_rows:
-            st.bar_chart(per_question_rows, x="Question", y=["Moyenne", "Barème"])
+            st.bar_chart(per_question_rows, x="Question", y=["Moyenne", "Barème"], stack=False)
             st.caption("Lecture rapide : la barre « Moyenne » se compare directement au nombre de points disponibles au barème.")
 
     st.subheader("Dispersion par question")
