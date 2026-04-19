@@ -16,6 +16,9 @@ Premier jet disponible : un dashboard Streamlit en Python 3 permet de
 - utiliser le barème défini dans le mode `Barème` pour saisir, question par question, les points attribués à un rendu étudiant ;
 - calculer automatiquement le total obtenu et afficher une note sur 20 dans la colonne d'évaluation, ainsi que dans les indicateurs affichés en haut de la vue ;
 - sauvegarder la notation d'un étudiant dans `rendus-des-etudiants/<tp>/<rendu>/notes.json` et la recharger automatiquement lors d'une réouverture ;
+- utiliser le mode `Vue de la classe par TP` pour synthétiser les notes déjà sauvegardées de toute la classe sur un TP donné ;
+- visualiser la moyenne générale, la médiane, le minimum, le maximum, l'écart-type, ainsi que les statistiques détaillées question par question ;
+- afficher plusieurs graphiques Streamlit directement dans le dashboard pour comparer les notes par étudiant, la moyenne par question et la dispersion des résultats ;
 - afficher le code source rendu (`code_rendu.c` ou `code_rendu.ml`) avec coloration syntaxique ;
 - afficher le compte-rendu PDF de l'étudiant, avec repli sur le Markdown si le PDF n'existe pas encore.
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import json
+import statistics
 from pathlib import Path
 
 import streamlit as st
@@ -25,13 +26,14 @@ CODE_CANDIDATES = ("code_rendu.c", "code_rendu.ml")
 REPORT_PDF_CANDIDATES = ("compte-rendu.pdf", "compte_rendu.pdf")
 REPORT_MD_CANDIDATES = ("compte-rendu.md", "compte_rendu.md")
 BAREME_FILENAME = "bareme.json"
+NOTES_FILENAME = "notes.json"
 DEFAULT_QUESTION_COUNT = 10
 DEFAULT_QUESTION_POINTS = 5
 APP_MODES = (
     "1 - Barème",
     "2 - Évaluation des rendus",
-    "3 - Vue de la classe",
-    "4 - Statistiques de cohorte",
+    "3 - Vue de la classe par TP",
+    "4 - Progression annuelle individuelle",
 )
 
 
@@ -50,6 +52,16 @@ def get_subject_dir(tp_name: str) -> Path:
 def get_bareme_path(tp_name: str) -> Path:
     """Return the JSON file used to persist the marking scheme for a practical session."""
     return get_subject_dir(tp_name) / BAREME_FILENAME
+
+
+def get_notes_path(student_dir: Path) -> Path:
+    """Return the JSON file used to persist one student's grading data."""
+    return student_dir / NOTES_FILENAME
+
+
+def has_saved_grading(student_dir: Path) -> bool:
+    """Return whether a student's submission directory already contains saved grading data."""
+    return get_notes_path(student_dir).exists()
 
 
 @st.cache_data(show_spinner=True)
@@ -225,6 +237,156 @@ def get_grading_points_widget_key(tp_name: str, student_name: str, question_inde
     return f"grading_points::{tp_name}::{student_name}::{question_index}"
 
 
+def get_grading_session_key(tp_name: str, student_name: str) -> str:
+    """Return the Streamlit session key used to store one student's grading data."""
+    return f"grading::{tp_name}::{student_name}"
+
+
+def build_default_grading_data(
+    tp_name: str, student_name: str, bareme_questions: list[dict[str, object]]
+) -> dict[str, object]:
+    """Create default grading data for one student from the current marking scheme."""
+    graded_questions = []
+    for question in bareme_questions:
+        graded_questions.append(
+            {
+                "index": get_question_index(question),
+                "label": get_question_label(question),
+                "max_points": get_question_points(question),
+                "points_awarded": 0,
+            }
+        )
+
+    total_points_bareme = sum(get_question_points(question) for question in bareme_questions)
+    return {
+        "format_version": 1,
+        "tp_name": tp_name,
+        "student_name": student_name,
+        "question_count": len(graded_questions),
+        "total_points_awarded": 0,
+        "total_points_bareme": total_points_bareme,
+        "note_sur_20": 0.0,
+        "questions": graded_questions,
+    }
+
+
+def normalize_grading_data(
+    tp_name: str,
+    student_name: str,
+    bareme_questions: list[dict[str, object]],
+    data: dict[str, object] | None,
+) -> dict[str, object]:
+    """Sanitize persisted grading data and align it with the current marking scheme."""
+    default_data = build_default_grading_data(tp_name, student_name, bareme_questions)
+    if not isinstance(data, dict):
+        return default_data
+
+    raw_questions = data.get("questions", [])
+    persisted_by_index: dict[int, int] = {}
+    if isinstance(raw_questions, list):
+        for question in raw_questions:
+            if not isinstance(question, dict):
+                continue
+            raw_index = question.get("index", 0)
+            raw_points_awarded = question.get("points_awarded", 0)
+            if isinstance(raw_index, int) and isinstance(raw_points_awarded, (int, float)):
+                persisted_by_index[raw_index] = int(raw_points_awarded)
+
+    normalized_questions = []
+    total_points_awarded = 0
+    total_points_bareme = sum(get_question_points(question) for question in bareme_questions)
+    for question in bareme_questions:
+        question_index = get_question_index(question)
+        max_points = get_question_points(question)
+        points_awarded = max(0, min(max_points, persisted_by_index.get(question_index, 0)))
+        total_points_awarded += points_awarded
+        normalized_questions.append(
+            {
+                "index": question_index,
+                "label": get_question_label(question),
+                "max_points": max_points,
+                "points_awarded": points_awarded,
+            }
+        )
+
+    note_sur_20 = round(20 * total_points_awarded / float(total_points_bareme), 2) if total_points_bareme else 0.0
+    return {
+        "format_version": 1,
+        "tp_name": tp_name,
+        "student_name": student_name,
+        "question_count": len(normalized_questions),
+        "total_points_awarded": total_points_awarded,
+        "total_points_bareme": total_points_bareme,
+        "note_sur_20": note_sur_20,
+        "questions": normalized_questions,
+    }
+
+
+def load_grading_data(
+    tp_name: str, student_name: str, student_dir: Path, bareme_questions: list[dict[str, object]]
+) -> dict[str, object]:
+    """Load persisted grading data for one student, or build a default empty grading sheet."""
+    notes_path = get_notes_path(student_dir)
+    if not notes_path.exists():
+        return build_default_grading_data(tp_name, student_name, bareme_questions)
+
+    try:
+        loaded_data = json.loads(read_text_file(str(notes_path)))
+    except (OSError, json.JSONDecodeError):
+        return build_default_grading_data(tp_name, student_name, bareme_questions)
+
+    return normalize_grading_data(
+        tp_name,
+        student_name,
+        bareme_questions,
+        loaded_data if isinstance(loaded_data, dict) else None,
+    )
+
+
+def save_grading_data(student_dir: Path, grading_data: dict[str, object]) -> None:
+    """Persist one student's grading data as formatted JSON in the submission directory."""
+    notes_path = get_notes_path(student_dir)
+    notes_path.write_text(json.dumps(grading_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def sync_grading_widgets(tp_name: str, student_name: str, grading_data: dict[str, object]) -> None:
+    """Copy persisted grading values into the Streamlit widget state for one student."""
+    raw_questions = grading_data.get("questions", [])
+    if not isinstance(raw_questions, list):
+        return
+
+    for question in raw_questions:
+        if not isinstance(question, dict):
+            continue
+        question_index = question.get("index", 0)
+        points_awarded = question.get("points_awarded", 0)
+        if isinstance(question_index, int) and isinstance(points_awarded, (int, float)):
+            widget_key = get_grading_points_widget_key(tp_name, student_name, question_index)
+            st.session_state[widget_key] = int(points_awarded)
+
+
+def get_grading_data(
+    tp_name: str, student_name: str | None, student_dir: Path | None, bareme_questions: list[dict[str, object]]
+) -> dict[str, object] | None:
+    """Return the current in-session grading data for the selected student."""
+    if not student_name or student_dir is None:
+        return None
+
+    session_key = get_grading_session_key(tp_name, student_name)
+    if session_key not in st.session_state:
+        st.session_state[session_key] = load_grading_data(tp_name, student_name, student_dir, bareme_questions)
+        sync_grading_widgets(tp_name, student_name, st.session_state[session_key])
+    else:
+        st.session_state[session_key] = normalize_grading_data(
+            tp_name,
+            student_name,
+            bareme_questions,
+            st.session_state[session_key],
+        )
+
+    return st.session_state[session_key]
+
+
 def get_current_grading_summary(
     tp_name: str, student_name: str | None, bareme_questions: list[dict[str, object]]
 ) -> tuple[int, int, float]:
@@ -243,6 +405,165 @@ def get_current_grading_summary(
 
     note_sur_20 = round(20 * total_points / float(total_points_bareme), 2) if total_points_bareme else 0.0
     return total_points, total_points_bareme, note_sur_20
+
+
+def summarize_numeric_values(values: list[float]) -> dict[str, float]:
+    """Compute a compact statistical summary for a numeric series."""
+    if not values:
+        return {"mean": 0.0, "median": 0.0, "min": 0.0, "max": 0.0, "stddev": 0.0}
+
+    return {
+        "mean": round(statistics.fmean(values), 2),
+        "median": round(statistics.median(values), 2),
+        "min": round(min(values), 2),
+        "max": round(max(values), 2),
+        "stddev": round(statistics.pstdev(values), 2) if len(values) > 1 else 0.0,
+    }
+
+
+def get_record_student_name(record: dict[str, object]) -> str:
+    """Extract a student name from a class record."""
+    raw_student_name = record.get("student_name", "")
+    return raw_student_name if isinstance(raw_student_name, str) else ""
+
+
+def get_record_total_points(record: dict[str, object]) -> float:
+    """Extract awarded total points from a class record."""
+    raw_total_points = record.get("total_points", 0)
+    return float(raw_total_points) if isinstance(raw_total_points, (int, float)) else 0.0
+
+
+def get_record_note_sur_20(record: dict[str, object]) -> float:
+    """Extract the global grade on 20 from a class record."""
+    raw_note_sur_20 = record.get("note_sur_20", 0.0)
+    return float(raw_note_sur_20) if isinstance(raw_note_sur_20, (int, float)) else 0.0
+
+
+def get_record_question_points(record: dict[str, object]) -> list[int]:
+    """Extract per-question awarded points from a class record."""
+    raw_question_points = record.get("question_points", [])
+    if not isinstance(raw_question_points, list):
+        return []
+
+    points: list[int] = []
+    for value in raw_question_points:
+        points.append(int(value) if isinstance(value, (int, float)) else 0)
+    return points
+
+
+def get_classroom_int(stats: dict[str, object], key: str) -> int:
+    """Extract an integer value from classroom statistics."""
+    raw_value = stats.get(key, 0)
+    return raw_value if isinstance(raw_value, int) else 0
+
+
+def get_classroom_str_list(stats: dict[str, object], key: str) -> list[str]:
+    """Extract a string list from classroom statistics."""
+    raw_value = stats.get(key, [])
+    if not isinstance(raw_value, list):
+        return []
+    return [value for value in raw_value if isinstance(value, str)]
+
+
+def get_classroom_summary(stats: dict[str, object], key: str) -> dict[str, float]:
+    """Extract a numeric summary mapping from classroom statistics."""
+    raw_value = stats.get(key, {})
+    if not isinstance(raw_value, dict):
+        return summarize_numeric_values([])
+
+    return {
+        "mean": float(raw_value.get("mean", 0.0)) if isinstance(raw_value.get("mean", 0.0), (int, float)) else 0.0,
+        "median": float(raw_value.get("median", 0.0)) if isinstance(raw_value.get("median", 0.0), (int, float)) else 0.0,
+        "min": float(raw_value.get("min", 0.0)) if isinstance(raw_value.get("min", 0.0), (int, float)) else 0.0,
+        "max": float(raw_value.get("max", 0.0)) if isinstance(raw_value.get("max", 0.0), (int, float)) else 0.0,
+        "stddev": float(raw_value.get("stddev", 0.0)) if isinstance(raw_value.get("stddev", 0.0), (int, float)) else 0.0,
+    }
+
+
+def get_classroom_rows(stats: dict[str, object], key: str) -> list[dict[str, object]]:
+    """Extract a list of rows from classroom statistics."""
+    raw_value = stats.get(key, [])
+    if not isinstance(raw_value, list):
+        return []
+    return [row for row in raw_value if isinstance(row, dict)]
+
+
+def build_classroom_statistics(tp_name: str, bareme_questions: list[dict[str, object]]) -> dict[str, object]:
+    """Aggregate saved student grades into class-level statistics for one practical session."""
+    student_dirs = discover_student_dirs(tp_name)
+    evaluated_records: list[dict[str, object]] = []
+    pending_students: list[str] = []
+
+    for student_dir in student_dirs:
+        if not has_saved_grading(student_dir):
+            pending_students.append(student_dir.name)
+            continue
+
+        grading_data = load_grading_data(tp_name, student_dir.name, student_dir, bareme_questions)
+        raw_questions = grading_data.get("questions", [])
+        awarded_by_index: dict[int, int] = {}
+        if isinstance(raw_questions, list):
+            for question in raw_questions:
+                if not isinstance(question, dict):
+                    continue
+                raw_index = question.get("index", 0)
+                raw_points_awarded = question.get("points_awarded", 0)
+                if isinstance(raw_index, int) and isinstance(raw_points_awarded, (int, float)):
+                    awarded_by_index[raw_index] = int(raw_points_awarded)
+
+        question_points = [awarded_by_index.get(get_question_index(question), 0) for question in bareme_questions]
+        total_points = sum(question_points)
+        total_points_bareme = sum(get_question_points(question) for question in bareme_questions)
+        note_sur_20 = round(20 * total_points / float(total_points_bareme), 2) if total_points_bareme else 0.0
+        evaluated_records.append(
+            {
+                "student_name": student_dir.name,
+                "question_points": question_points,
+                "total_points": total_points,
+                "total_points_bareme": total_points_bareme,
+                "note_sur_20": note_sur_20,
+            }
+        )
+
+    global_notes = [get_record_note_sur_20(record) for record in evaluated_records]
+    global_totals = [get_record_total_points(record) for record in evaluated_records]
+    question_rows: list[dict[str, object]] = []
+    for position, question in enumerate(bareme_questions):
+        label = get_question_label(question)
+        bareme_points = get_question_points(question)
+        question_values = [float(get_record_question_points(record)[position]) for record in evaluated_records]
+        summary = summarize_numeric_values(question_values)
+        question_rows.append(
+            {
+                "Question": label,
+                "Barème": bareme_points,
+                "Moyenne": summary["mean"],
+                "Médiane": summary["median"],
+                "Minimum": summary["min"],
+                "Maximum": summary["max"],
+                "Écart-type": summary["stddev"],
+            }
+        )
+
+    notes_summary = summarize_numeric_values(global_notes)
+    totals_summary = summarize_numeric_values(global_totals)
+
+    sorted_records = sorted(evaluated_records, key=get_record_note_sur_20, reverse=True)
+    student_notes_rows = [
+        {"Étudiant": get_record_student_name(record), "Note /20": get_record_note_sur_20(record)}
+        for record in sorted_records
+    ]
+
+    return {
+        "student_count": len(student_dirs),
+        "evaluated_count": len(evaluated_records),
+        "pending_count": len(pending_students),
+        "pending_students": pending_students,
+        "notes_summary": notes_summary,
+        "totals_summary": totals_summary,
+        "student_notes_rows": student_notes_rows,
+        "per_question_rows": question_rows,
+    }
 
 
 def get_bareme_data(tp_name: str) -> dict[str, object]:
@@ -385,7 +706,7 @@ def render_bareme_mode(tp_name: str) -> None:
     """Render the marking scheme editor and persist it in the session state."""
 
     st.title(f"Rédaction du barème de notation - `{tp_name}`")
-    st.caption("Mode de préparation du barème du TP sélectionné, avec sauvegarde locale par sujet.")
+    st.caption("Mode de préparation du barème du TP sélectionné, avec sauvegarde locale et rechargement, par sujet (fichiers JSON).")
 
     bareme_data = get_bareme_data(tp_name)
     question_count = get_bareme_question_count(bareme_data)
@@ -398,7 +719,7 @@ def render_bareme_mode(tp_name: str) -> None:
         render_subject_panel(tp_name)
 
     with bareme_col:
-        st.subheader("Conception et écriture du Barème")
+        st.subheader("Conception et écriture du barème")
         summary_col_questions, summary_col_total = st.columns(2)
         summary_col_questions.metric("Nombre de questions", question_count)
         summary_col_total.metric("Total de points", total_points)
@@ -498,6 +819,8 @@ def render_submissions_mode(tp_name: str) -> None:
     if selected_student_name:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
+    grading_data = get_grading_data(tp_name, selected_student_name, selected_student_dir, bareme_questions)
+
     total_points, total_points_bareme, note_sur_20 = get_current_grading_summary(
         tp_name, selected_student_name, bareme_questions
     )
@@ -520,13 +843,14 @@ def render_submissions_mode(tp_name: str) -> None:
 
     with grading_col:
         st.subheader("Évaluation")
-        with st.container(height=720):
-            if selected_student_dir is None:
-                st.info("Sélectionnez un rendu étudiant pour saisir l'évaluation question par question.")
-            elif not bareme_questions:
-                st.warning("Aucun barème n'est disponible pour ce TP. Commencez par renseigner le mode « 1 - Barème ».")
-            else:
-                updated_grades: list[int] = []
+        if selected_student_dir is None:
+            st.info("Sélectionnez un rendu étudiant pour saisir l'évaluation question par question.")
+        elif not bareme_questions:
+            st.warning("Aucun barème n'est disponible pour ce TP. Commencez par renseigner le mode « 1 - Barème ».")
+        else:
+            updated_grades: list[int] = []
+            updated_questions: list[dict[str, object]] = []
+            with st.container(height=720):
                 for question in bareme_questions:
                     question_index = get_question_index(question)
                     question_label = get_question_label(question)
@@ -549,10 +873,35 @@ def render_submissions_mode(tp_name: str) -> None:
                             )
                         )
                     updated_grades.append(grade)
+                    updated_questions.append(
+                        {
+                            "index": question_index,
+                            "label": question_label,
+                            "max_points": max_points,
+                            "points_awarded": grade,
+                        }
+                    )
                     st.caption(f"Maximum : {max_points} point{'s' if max_points > 1 else ''}")
 
-                total_points = sum(updated_grades)
-                note_sur_20 = round(20 * total_points / float(total_points_bareme), 2) if total_points_bareme else 0.0
+            total_points = sum(updated_grades)
+            note_sur_20 = round(20 * total_points / float(total_points_bareme), 2) if total_points_bareme else 0.0
+            if selected_student_name:
+                grading_data = {
+                    "format_version": 1,
+                    "tp_name": tp_name,
+                    "student_name": selected_student_name,
+                    "question_count": len(updated_questions),
+                    "total_points_awarded": total_points,
+                    "total_points_bareme": total_points_bareme,
+                    "note_sur_20": note_sur_20,
+                    "questions": updated_questions,
+                }
+                st.session_state[get_grading_session_key(tp_name, selected_student_name)] = grading_data
+
+                if st.button("Sauvegarder la notation", type="primary", use_container_width=True):
+                    save_grading_data(selected_student_dir, grading_data)
+                    read_text_file.clear()
+                    st.success(f"Notation sauvegardée dans {get_notes_path(selected_student_dir).name}.")
 
     with student_col:
         st.subheader("Rendu étudiant")
@@ -594,6 +943,80 @@ def render_submissions_mode(tp_name: str) -> None:
                     st.write(f"- {label} : `{path.name}`")
 
 
+def render_classroom_mode(tp_name: str) -> None:
+    """Render the class-level overview for one practical session from saved student grades."""
+    bareme_data = get_bareme_data(tp_name)
+    bareme_questions = get_bareme_questions(bareme_data)
+
+    st.title(f"Vue de la classe par TP - `{tp_name}`")
+    st.caption(
+        "Tableau de bord de synthèse pour visualiser les notes déjà sauvegardées de toute la classe sur ce TP."
+    )
+
+    if not bareme_questions:
+        st.warning("Aucun barème n'est disponible pour ce TP. Commencez par renseigner le mode « 1 - Barème ».")
+        return
+
+    classroom_stats = build_classroom_statistics(tp_name, bareme_questions)
+    evaluated_count = get_classroom_int(classroom_stats, "evaluated_count")
+    if evaluated_count == 0:
+        st.info("Aucune notation sauvegardée n'a encore été trouvée pour ce TP. Commencez par évaluer au moins un rendu.")
+        return
+
+    notes_summary = get_classroom_summary(classroom_stats, "notes_summary")
+    totals_summary = get_classroom_summary(classroom_stats, "totals_summary")
+    student_notes_rows = get_classroom_rows(classroom_stats, "student_notes_rows")
+    per_question_rows = get_classroom_rows(classroom_stats, "per_question_rows")
+    pending_count = get_classroom_int(classroom_stats, "pending_count")
+    student_count = get_classroom_int(classroom_stats, "student_count")
+    pending_students = get_classroom_str_list(classroom_stats, "pending_students")
+
+    top_row_1, top_row_2, top_row_3, top_row_4 = st.columns(4)
+    top_row_1.metric("Rendus détectés", student_count)
+    top_row_2.metric("Évaluations sauvegardées", evaluated_count)
+    top_row_3.metric("Moyenne générale", f"{notes_summary['mean']}/20")
+    top_row_4.metric("Écart-type global", f"{notes_summary['stddev']}")
+
+    second_row_1, second_row_2, second_row_3, second_row_4 = st.columns(4)
+    second_row_1.metric("Médiane générale", f"{notes_summary['median']}/20")
+    second_row_2.metric("Note minimale", f"{notes_summary['min']}/20")
+    second_row_3.metric("Note maximale", f"{notes_summary['max']}/20")
+    second_row_4.metric("Moyenne en points", f"{totals_summary['mean']} pts")
+
+    st.caption(
+        f"Les statistiques ci-dessous portent sur {evaluated_count} rendu{'s' if evaluated_count > 1 else ''} déjà noté{'s' if evaluated_count > 1 else ''}."
+    )
+    if pending_count:
+        pending_preview = ", ".join(str(name) for name in pending_students[:8])
+        suffix = "..." if pending_count > 8 else ""
+        st.info(f"{pending_count} rendu(x) restent sans `notes.json` pour ce TP : {pending_preview}{suffix}")
+
+    chart_col_left, chart_col_right = st.columns((1.15, 1), gap="large")
+    with chart_col_left:
+        st.subheader("Répartition des notes de la classe")
+        if student_notes_rows:
+            st.bar_chart(student_notes_rows, x="Étudiant", y="Note /20")
+            st.dataframe(student_notes_rows, use_container_width=True, hide_index=True)
+
+    with chart_col_right:
+        st.subheader("Moyenne par question vs barème")
+        if per_question_rows:
+            st.bar_chart(per_question_rows, x="Question", y=["Moyenne", "Barème"])
+            st.caption("Lecture rapide : la barre « Moyenne » se compare directement au nombre de points disponibles au barème.")
+
+    st.subheader("Dispersion par question")
+    if per_question_rows:
+        st.line_chart(per_question_rows, x="Question", y=["Minimum", "Médiane", "Maximum"])
+        st.caption("Chaque question affiche son minimum, sa médiane et son maximum observés dans la classe.")
+
+    st.subheader("Statistiques détaillées par question")
+    if per_question_rows:
+        st.dataframe(per_question_rows, use_container_width=True, hide_index=True)
+
+    with st.expander("Afficher le sujet du TP pour contextualiser la vue de classe"):
+        render_subject_panel(tp_name)
+
+
 def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
     """Render a placeholder for future dashboard modes that are not implemented yet."""
     st.title("Dashboard d'évaluation et de pilotage des TP")
@@ -627,6 +1050,8 @@ def main() -> None:
         render_bareme_mode(selected_tp)
     elif selected_mode == "2 - Évaluation des rendus":
         render_submissions_mode(selected_tp)
+    elif selected_mode == "3 - Vue de la classe par TP":
+        render_classroom_mode(selected_tp)
     else:
         render_placeholder_mode(selected_tp, selected_mode)
 
@@ -634,8 +1059,11 @@ def main() -> None:
     st.markdown(
         """
         ### Suite prévue
-        Les prochaines étapes incluent l'amélioration du mode barème, la lecture automatique du sujet,
-        l'analyse du code et du compte-rendu étudiant, ainsi que l'ajout de vues de classe et de statistiques.
+        Les prochaines étapes incluent l'amélioration du mode barème (calcul automatique par LLM/IA depuis la lecture automatique du sujet ?),
+        puis l'analyse du code et du compte-rendu étudiant pour l'évaluer semi-automatiquement par LLM/IA,
+        ainsi que l'ajout de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
+
+        Des idées ? [Ouvrez un ticket !](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new)
         """
     )
 

@@ -27,6 +27,13 @@
 - Vérifier la sauvegarde de `notes.json` dans le dossier de rendu de l'étudiant.
 - Vérifier le rechargement automatique de `notes.json` lors du retour sur un rendu déjà évalué.
 
+## Tester le mode Vue de la classe par TP
+
+- Vérifier que la vue n'agrège que les rendus disposant d'un `notes.json`.
+- Vérifier que les statistiques globales (moyenne, médiane, min, max, écart-type) sont cohérentes avec les notes sauvegardées.
+- Vérifier que les statistiques par question respectent bien le barème du TP courant.
+- Vérifier que les graphiques restent lisibles quand le nombre d'étudiants ou de questions augmente.
+
 -----------------------------------------------------
 
 ## Maintenir la documentation
