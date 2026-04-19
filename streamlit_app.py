@@ -1098,26 +1098,31 @@ def render_classroom_mode(tp_name: str) -> None:
     with chart_col_left:
         st.subheader("Répartition des notes de la classe")
         if student_notes_rows:
-            notes_chart = (
-                alt.Chart(alt.Data(values=student_notes_rows))
-                .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
-                .encode(
-                    x=alt.X("Étudiant:N", sort=None, title="Étudiant"),
-                    y=alt.Y("Note /20:Q", scale=alt.Scale(domain=[0, 20]), title="Note /20"),
-                    color=alt.Color(
-                        "Note /20:Q",
-                        scale=alt.Scale(domain=[0, 20], range=["#c62828", "#1565c0"]),
-                        legend=alt.Legend(title="Note /20"),
-                    ),
-                    tooltip=[
-                        alt.Tooltip("Étudiant:N", title="Étudiant"),
-                        alt.Tooltip("Note /20:Q", title="Note", format=".2f"),
-                    ],
+                notes_chart_rows: list[dict[str, object]] = []
+                for row in student_notes_rows:
+                    notes_chart_rows.append({**row, "TP": tp_name})
+
+                notes_chart = (
+                    alt.Chart(alt.Data(values=notes_chart_rows))
+                    .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+                    .encode(
+                        x=alt.X("Étudiant:N", sort=None, title="Étudiant"),
+                        y=alt.Y("Note /20:Q", scale=alt.Scale(domain=[0, 20]), title="Note /20"),
+                        color=alt.Color(
+                            "Note /20:Q",
+                            scale=alt.Scale(domain=[0, 20], range=["#c62828", "#1565c0"]),
+                            legend=alt.Legend(title="Note /20"),
+                        ),
+                        tooltip=[
+                            alt.Tooltip("TP:N", title="TP"),
+                            alt.Tooltip("Étudiant:N", title="Étudiant"),
+                            alt.Tooltip("Note /20:Q", title="Note", format=".2f"),
+                        ],
+                    )
+                    .properties(height=320, title=f"Répartition des notes pour {tp_name}")
                 )
-                .properties(height=320)
-            )
-            st.altair_chart(notes_chart, width='stretch')
-            st.dataframe(student_notes_rows, width='stretch', hide_index=True)
+                st.altair_chart(notes_chart, width='stretch')
+                st.dataframe(student_notes_rows, width='stretch', hide_index=True)
 
     with chart_col_right:
         st.subheader("Moyenne par question vs barème")
@@ -1289,7 +1294,7 @@ def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
 def main() -> None:
     """Build the Streamlit interface and wire repository discovery to UI widgets."""
     st.set_page_config(
-        page_title="Auto-Eval TP MP2I @ Lycée Kléber (Lilian BESSON)",
+        page_title="Evaluator TP MP2I @ Lycée Kléber (Lilian BESSON)",
         page_icon="📚",
         layout="wide",
         initial_sidebar_state="expanded",
@@ -1300,7 +1305,7 @@ def main() -> None:
         st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
         return
 
-    st.sidebar.title("Auto-Eval TP MP2I")
+    st.sidebar.title("Evaluator TP MP2I")
     st.sidebar.subheader("Navigation")
     selected_mode = st.sidebar.selectbox("Choisir un mode", APP_MODES, index=0)
 
