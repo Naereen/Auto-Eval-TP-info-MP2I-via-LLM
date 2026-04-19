@@ -252,6 +252,11 @@ def get_grading_session_key(tp_name: str, student_name: str) -> str:
     return f"grading::{tp_name}::{student_name}"
 
 
+def get_grading_selection_key(tp_name: str) -> str:
+    """Return the session key tracking the currently loaded student for one practical session."""
+    return f"grading_selection::{tp_name}"
+
+
 def build_default_grading_data(
     tp_name: str, student_name: str, bareme_questions: list[dict[str, object]]
 ) -> dict[str, object]:
@@ -395,6 +400,26 @@ def get_grading_data(
         )
 
     return st.session_state[session_key]
+
+
+def ensure_selected_grading_loaded(
+    tp_name: str, student_name: str | None, student_dir: Path | None, bareme_questions: list[dict[str, object]]
+) -> None:
+    """Load grading data from disk when the selected student changes in evaluation mode."""
+    selection_key = get_grading_selection_key(tp_name)
+    current_signature = student_name if student_name is not None else ""
+    previous_signature = st.session_state.get(selection_key, "")
+
+    if current_signature == previous_signature:
+        return
+
+    st.session_state[selection_key] = current_signature
+    if not student_name or student_dir is None:
+        return
+
+    loaded_grading_data = load_grading_data(tp_name, student_name, student_dir, bareme_questions)
+    st.session_state[get_grading_session_key(tp_name, student_name)] = loaded_grading_data
+    sync_grading_widgets(tp_name, student_name, loaded_grading_data)
 
 
 def get_current_grading_summary(
@@ -895,6 +920,7 @@ def render_submissions_mode(tp_name: str) -> None:
     if selected_student_name:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
+    ensure_selected_grading_loaded(tp_name, selected_student_name, selected_student_dir, bareme_questions)
     grading_data = get_grading_data(tp_name, selected_student_name, selected_student_dir, bareme_questions)
 
     total_points, total_points_bareme, note_sur_20 = get_current_grading_summary(
@@ -1129,6 +1155,7 @@ def render_individual_progress_mode() -> None:
         "Choisir un étudiant",
         student_names,
         index=0,
+        key="individual_progress_selected_student",
         help="La progression annuelle agrège les fichiers `notes.json` déjà sauvegardés pour cet étudiant sur l'ensemble des TP.",
     )
 
@@ -1180,8 +1207,11 @@ def render_individual_progress_mode() -> None:
     charts_col_left, charts_col_right = st.columns((1.2, 1), gap="large")
     with charts_col_left:
         st.subheader("Trajectoire des notes au fil des TP")
+        timeline_rows: list[dict[str, object]] = []
+        for row in evaluated_rows:
+            timeline_rows.append({**row, "Étudiant": selected_student_name})
         notes_timeline_chart = (
-            alt.Chart(alt.Data(values=evaluated_rows))
+            alt.Chart(alt.Data(values=timeline_rows))
             .mark_line(point=alt.OverlayMarkDef(filled=True, size=90), strokeWidth=3)
             .encode(
                 x=alt.X("TP:N", sort=None, title="TP"),
@@ -1192,13 +1222,14 @@ def render_individual_progress_mode() -> None:
                     legend=None,
                 ),
                 tooltip=[
+                    alt.Tooltip("Étudiant:N", title="Étudiant"),
                     alt.Tooltip("TP:N", title="TP"),
                     alt.Tooltip("Note /20:Q", title="Note", format=".2f"),
                     alt.Tooltip("Points obtenus:Q", title="Points"),
                     alt.Tooltip("Barème total:Q", title="Barème total"),
                 ],
             )
-            .properties(height=340)
+            .properties(height=340, title=f"Progression de {selected_student_name}")
         )
         st.altair_chart(notes_timeline_chart, width="stretch")
 
@@ -1221,7 +1252,7 @@ def render_individual_progress_mode() -> None:
 
     st.subheader("Rythme de réussite")
     success_chart = (
-        alt.Chart(alt.Data(values=evaluated_rows))
+        alt.Chart(alt.Data(values=timeline_rows))
         .mark_area(opacity=0.55)
         .encode(
             x=alt.X("TP:N", sort=None, title="TP"),
@@ -1232,11 +1263,12 @@ def render_individual_progress_mode() -> None:
                 legend=None,
             ),
             tooltip=[
+                alt.Tooltip("Étudiant:N", title="Étudiant"),
                 alt.Tooltip("TP:N", title="TP"),
                 alt.Tooltip("Taux de réussite:Q", title="Taux", format=".1%"),
             ],
         )
-        .properties(height=220)
+        .properties(height=220, title=f"Taux de réussite de {selected_student_name}")
     )
     st.altair_chart(success_chart, width="stretch")
 

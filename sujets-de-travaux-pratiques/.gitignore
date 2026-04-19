@@ -1,1 +1,15 @@
-37-graphes-euleriens/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.md
+*.json
+*.c
+*.ml
+*.tex
+Makefile
+*.exe
+*.zip
+*.o
+*.h
+*.txt

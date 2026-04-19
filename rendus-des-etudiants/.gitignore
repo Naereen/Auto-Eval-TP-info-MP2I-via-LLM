@@ -1,1 +1,6 @@
-37-graphes-euleriens/
+*.pdf
+*.md
+*.json
+*.c
+*.ml
+*.tex
