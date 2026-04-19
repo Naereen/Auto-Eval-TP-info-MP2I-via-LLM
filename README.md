@@ -12,6 +12,12 @@ Premier jet disponible : un dashboard Streamlit en Python 3 permet de
 - afficher le code source rendu (`code_rendu.c` ou `code_rendu.ml`) avec coloration syntaxique ;
 - afficher le compte-rendu PDF de l'étudiant, avec repli sur le Markdown si le PDF n'existe pas encore.
 
+## Documentation du projet
+
+- Les commentaires et docstrings dans le code Python sont rédigés en anglais, afin de garder une documentation technique homogène.
+- Les textes destinés à l'utilisateur final restent en français correct et accentué.
+- Toute évolution fonctionnelle du projet doit s'accompagner d'une mise à jour de la documentation pertinente dans ce dépôt, en particulier dans `README.md`, `TODO.md` et dans les commentaires utiles du code.
+
 ## Lancement local
 
 Depuis la racine du dépôt :

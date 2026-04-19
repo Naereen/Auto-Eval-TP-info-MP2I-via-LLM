@@ -1,3 +1,10 @@
+"""Streamlit dashboard used to inspect TP subjects and student submissions.
+
+The app discovers available practical sessions from the repository layout,
+renders subject PDFs, previews submitted source files, and displays the
+associated report when available.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -10,24 +17,28 @@ import streamlit.components.v1 as components
 ROOT_DIR = Path(__file__).resolve().parent
 SUBJECTS_DIR = ROOT_DIR / "sujets-de-travaux-pratiques"
 SUBMISSIONS_DIR = ROOT_DIR / "rendus-des-etudiants"
+# Preferred filenames are checked first before falling back to broader glob searches.
 CODE_CANDIDATES = ("code_rendu.c", "code_rendu.ml")
 REPORT_PDF_CANDIDATES = ("compte-rendu.pdf", "compte_rendu.pdf")
 REPORT_MD_CANDIDATES = ("compte-rendu.md", "compte_rendu.md")
 
 
 def list_subdirectories(directory: Path) -> list[Path]:
+    """Return subdirectories sorted by name, or an empty list if the parent is missing."""
     if not directory.exists():
         return []
     return sorted((path for path in directory.iterdir() if path.is_dir()), key=lambda path: path.name.lower())
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def discover_tp_names() -> list[str]:
+    """List available practical sessions from the subjects directory."""
     return [path.name for path in list_subdirectories(SUBJECTS_DIR)]
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def find_subject_pdf(tp_name: str) -> Path | None:
+    """Find the main PDF for a given practical session."""
     tp_dir = SUBJECTS_DIR / tp_name
     preferred = sorted(tp_dir.glob("tp-*.pdf"))
     if preferred:
@@ -40,18 +51,21 @@ def find_subject_pdf(tp_name: str) -> Path | None:
     return None
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def find_subject_tex_files(tp_name: str) -> list[Path]:
+    """List LaTeX sources associated with a practical session."""
     tp_dir = SUBJECTS_DIR / tp_name
     return sorted(tp_dir.glob("*.tex"))
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def discover_student_dirs(tp_name: str) -> list[Path]:
+    """List submission directories available for the selected practical session."""
     return list_subdirectories(SUBMISSIONS_DIR / tp_name)
 
 
 def pick_first_existing(directory: Path, candidates: tuple[str, ...]) -> Path | None:
+    """Return the first candidate filename that exists inside a directory."""
     for filename in candidates:
         path = directory / filename
         if path.exists():
@@ -60,6 +74,7 @@ def pick_first_existing(directory: Path, candidates: tuple[str, ...]) -> Path | 
 
 
 def find_student_code(student_dir: Path) -> Path | None:
+    """Locate the submitted source file, preferring the canonical filenames."""
     preferred = pick_first_existing(student_dir, CODE_CANDIDATES)
     if preferred is not None:
         return preferred
@@ -69,6 +84,7 @@ def find_student_code(student_dir: Path) -> Path | None:
 
 
 def find_student_report_pdf(student_dir: Path) -> Path | None:
+    """Locate the student report as a PDF when possible."""
     preferred = pick_first_existing(student_dir, REPORT_PDF_CANDIDATES)
     if preferred is not None:
         return preferred
@@ -78,6 +94,7 @@ def find_student_report_pdf(student_dir: Path) -> Path | None:
 
 
 def find_student_report_markdown(student_dir: Path) -> Path | None:
+    """Locate the student report as Markdown for the PDF fallback path."""
     preferred = pick_first_existing(student_dir, REPORT_MD_CANDIDATES)
     if preferred is not None:
         return preferred
@@ -86,17 +103,20 @@ def find_student_report_markdown(student_dir: Path) -> Path | None:
     return markdown_files[0] if markdown_files else None
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def read_text_file(path: str) -> str:
+    """Read a UTF-8 text file from disk and cache the content."""
     return Path(path).read_text(encoding="utf-8")
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=True)
 def read_binary_file(path: str) -> bytes:
+    """Read a binary file from disk and cache the content."""
     return Path(path).read_bytes()
 
 
 def render_pdf(path: Path, height: int = 780) -> None:
+    """Embed a local PDF in the Streamlit page through a data URL."""
     encoded = base64.b64encode(read_binary_file(str(path))).decode("ascii")
     iframe = f"""
     <iframe
@@ -110,6 +130,7 @@ def render_pdf(path: Path, height: int = 780) -> None:
 
 
 def detect_language(path: Path) -> str:
+    """Map supported source file extensions to Streamlit syntax highlighters."""
     if path.suffix == ".c":
         return "c"
     if path.suffix == ".ml":
@@ -118,7 +139,8 @@ def detect_language(path: Path) -> str:
 
 
 def render_header(tp_name: str, student_name: str | None, student_count: int) -> None:
-    st.title("Dashboard d'évaluation des rendus")
+    """Render the page title and the key metrics for the current selection."""
+    st.title("Dashboard d'évaluation des rendus de TP d'informatique en MP2I @ Lycée Kléber (Lilian BESSON)")
     st.caption(
         "Premier jet Streamlit pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
     )
@@ -129,8 +151,9 @@ def render_header(tp_name: str, student_name: str | None, student_count: int) ->
 
 
 def main() -> None:
+    """Build the Streamlit interface and wire repository discovery to UI widgets."""
     st.set_page_config(
-        page_title="Auto-Eval TP",
+        page_title="Auto-Eval TP MP2I @ Lycée Kléber (Lilian BESSON)",
         page_icon="📚",
         layout="wide",
         initial_sidebar_state="expanded",
