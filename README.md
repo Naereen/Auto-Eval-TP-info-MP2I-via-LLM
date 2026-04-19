@@ -1,10 +1,30 @@
 # Auto Évaluation de TP d'informatique (en MP2I), via LLM
 
-> **Expérimentation** : peut-on construire rapidement un outil d'aide à l'évaluation de rendus (code + md/PDF) de TP notés, en classe de MP2I, qui évaluerait une partie du code via des appels à LLM ? Via le service (ILASS](https://www.ilaas.fr/) et des modèles open-weight tels que [gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b).
+> **Expérimentation** : peut-on construire rapidement un outil d'aide à l'évaluation de rendus (code + md/PDF) de TP notés, en classe de MP2I, qui évaluerait une partie du code via des appels à LLM ? Via le service [ILASS](https://www.ilaas.fr/) et des modèles open-weight tels que [gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b).
 
 ## Fonctionnalités
 
-TODO: à remplir.
+Premier jet disponible : un dashboard Streamlit en Python 3 permet de
+
+- sélectionner un TP parmi ceux présents dans `sujets-de-travaux-pratiques` ;
+- afficher le PDF du sujet de TP dans le navigateur ;
+- sélectionner un rendu étudiant dans `rendus-des-etudiants/<tp>/` ;
+- afficher le code source rendu (`code_rendu.c` ou `code_rendu.ml`) avec coloration syntaxique ;
+- afficher le compte-rendu PDF de l'étudiant, avec repli sur le Markdown si le PDF n'existe pas encore.
+
+## Lancement local
+
+Depuis la racine du dépôt :
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+Le dashboard découvre automatiquement les dossiers de TP et les rendus disponibles.
+
+----
 
 ## TODO et idées
 
