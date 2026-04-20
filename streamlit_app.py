@@ -21,6 +21,7 @@ import streamlit as st
 from gemini_requests import response_from_llm
 
 
+# Parameters of the app and utility functions to manage the repository structure and persist grading data.
 ROOT_DIR = Path(__file__).resolve().parent
 SUBJECTS_DIR = ROOT_DIR / "sujets-de-travaux-pratiques"
 SUBMISSIONS_DIR = ROOT_DIR / "rendus-des-etudiants"
@@ -525,6 +526,21 @@ def summarize_numeric_values(values: list[float]) -> dict[str, float]:
     }
 
 
+def compute_linear_trend_slope(values: list[float]) -> float:
+    """Compute the slope of the best-fit first-order regression line for a numeric series."""
+    if len(values) < 2:
+        return 0.0
+
+    x_values = [float(index) for index in range(len(values))]
+    x_mean = statistics.fmean(x_values)
+    y_mean = statistics.fmean(values)
+    numerator = sum((x_value - x_mean) * (y_value - y_mean) for x_value, y_value in zip(x_values, values))
+    denominator = sum((x_value - x_mean) ** 2 for x_value in x_values)
+    if denominator == 0:
+        return 0.0
+    return round(numerator / denominator, 3)
+
+
 def get_record_student_name(record: dict[str, object]) -> str:
     """Extract a student name from a class record."""
     raw_student_name = record.get("student_name", "")
@@ -721,7 +737,7 @@ def build_individual_progress_statistics(student_name: str) -> dict[str, object]
     points = [get_row_float(row, "Points obtenus") for row in evaluated_rows]
     notes_summary = summarize_numeric_values(notes)
     points_summary = summarize_numeric_values(points)
-    progression_delta = round(notes[-1] - notes[0], 2) if len(notes) >= 2 else 0.0
+    progression_delta = compute_linear_trend_slope(notes)
 
     return {
         "evaluated_tp_count": len(evaluated_rows),
@@ -954,9 +970,9 @@ def render_bareme_mode(tp_name: str) -> None:
 
         llm_response_key = get_bareme_llm_response_key(tp_name)
         if llm_response_key in st.session_state:
-            st.subheader("Dernier résultat JSON proposé par l'IA")
             with st.expander("Afficher la réponse brute de l'IA (JSON)"):
-                with st.expander(height=520):
+                with st.container(height=520):
+                    st.markdown("#### Dernier résultat JSON proposé par l'IA")
                     st.json(st.session_state[llm_response_key])
 
         if st.session_state[uniform_points_state_key]:
@@ -1082,6 +1098,9 @@ def render_submissions_mode(tp_name: str) -> None:
         elif not bareme_questions:
             st.warning("Aucun barème n'est disponible pour ce TP. Commencez par renseigner le mode « 1 - Barème ».")
         else:
+
+            # TODO: ajouter le mode « auto evaluate » pour cette partie aussi
+
             student_identifier = selected_student_name or ""
             updated_grades: list[int] = []
             updated_questions: list[dict[str, object]] = []
@@ -1322,7 +1341,7 @@ def render_individual_progress_mode() -> None:
     summary_row_5, summary_row_6, summary_row_7, summary_row_8 = st.columns(4)
     summary_row_5.metric("Médiane", f"{notes_summary['median']}/20")
     summary_row_6.metric("Écart-type", f"{notes_summary['stddev']}")
-    summary_row_7.metric("Tendance sur l'année", f"{progression_delta:+.2f}")
+    summary_row_7.metric("Pente de tendance", f"{progression_delta:+.3f}")
     summary_row_8.metric("Moyenne en points", f"{points_summary['mean']} pts")
 
     st.caption(
@@ -1460,7 +1479,7 @@ def main() -> None:
         """
         ### Suite prévue
         Les prochaines étapes incluent l'amélioration du mode barème et de son mode automatique par LLM/IA depuis la lecture du sujet ;
-        puis l'analyse du code et du compte-rendu étudiant pour l'évaluer semi-automatiquement par LLM/IA,
+        puis l'analyse du code et du compte-rendu d'un étudiant pour l'évaluer semi-automatiquement par LLM/IA,
         ainsi que l'amélioration de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
 
         Des idées ? [Ouvrez un ticket !](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new)
