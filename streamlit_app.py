@@ -40,7 +40,7 @@ LOGO_LYCEE: Final[str] = "logo.jpeg"
 OCAML_INTERPRETER_PATH: Final[Path] = Path.home() / '.opam' / '4.14.1' / 'bin' / 'ocaml'
 
 # Preferred filenames are checked first before falling back to broader glob searches.
-CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "code_rendu.ml")
+CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "main.c", "code_rendu.ml", "main.ml")
 REPORT_PDF_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.pdf", "compte_rendu.pdf")
 REPORT_MD_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.md", "compte_rendu.md")
 
@@ -61,6 +61,7 @@ C_EXEC_LOG_FILENAME: Final[str] = "exec_code_rendu.log"
 C_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
 C_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
 C_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
+C_CRITERION_MAKEFILE_TEMPLATE: Final[str] = """all: test_code_rendu.exe run_tests_criterion\n\nCC = gcc\nCFLAGS = -Wall -Wextra -Wvla -fsanitize=address,undefined -g\nLDFLAGS = -lcriterion -lm\n\ntest_code_rendu.exe: code_rendu.c test_code_rendu.c\n\t$(CC) $(CFLAGS) -o test_code_rendu.exe code_rendu.c test_code_rendu.c $(LDFLAGS)\n\nrun_tests_criterion: run_tests_criterion_nojson\nrun_tests_criterion_nojson: test_code_rendu.exe\n\ttime ./test_code_rendu.exe --verbose\nrun_tests_criterion_json: test_code_rendu.exe\n\ttime ./test_code_rendu.exe --verbose --json\n"""
 
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
@@ -75,7 +76,7 @@ APP_MODES: Final[tuple[str, ...]] = (
     "5 - Progression annuelle individuelle",
 )
 
-SYSTEM_PROMPT = "Tu es une IA utile et extrêmement efficace, experte en informatique, en langue française. Tu vas m'aider, je suis un professeur d'informatique en Classes Préparatoires CPGE, dans la filière MP2I, en France."
+SYSTEM_PROMPT = "Tu es une IA utile et extrêmement efficace, experte en informatique, en langue française. Je suis un professeur d'informatique en Classes Préparatoires CPGE, dans la filière MP2I, en France, et tu vas m'aider."
 
 
 # Typed payloads make the persisted JSON structures easier to reason about.
@@ -229,11 +230,14 @@ def find_subject_markdown_files(tp_name: str) -> list[Path]:
 
 
 @st.cache_data(show_spinner=True)
-def discover_student_dirs(tp_name: str, name_of_dir_to_ignore=DUNE_TESTS_DIR) -> list[Path]:
+def discover_student_dirs(
+    tp_name: str, name_of_dir_to_ignore: str | Sequence[str] = (DUNE_TESTS_DIR, CRITERION_TESTS_DIR)
+) -> list[Path]:
     """List submission directories available for the selected practical session."""
     all_dirs = list_subdirectories(SUBMISSIONS_DIR / tp_name)
     if name_of_dir_to_ignore:
-        all_dirs = [d for d in all_dirs if name_of_dir_to_ignore not in d.parts and name_of_dir_to_ignore not in str(d.name)]
+        ignored_names = {name_of_dir_to_ignore} if isinstance(name_of_dir_to_ignore, str) else set(name_of_dir_to_ignore)
+        all_dirs = [d for d in all_dirs if d.name not in ignored_names]
     return all_dirs
 
 
@@ -243,7 +247,7 @@ def discover_all_student_names() -> list[str]:
     student_names: set[str] = set()
     for tp_name in discover_tp_names():
         for student_dir in discover_student_dirs(tp_name):
-            if DUNE_TESTS_DIR in student_dir.parts or DUNE_TESTS_DIR in str(student_dir.name):
+            if student_dir.name in {DUNE_TESTS_DIR, CRITERION_TESTS_DIR}:
                 continue
             student_names.add(student_dir.name)
     return sorted(student_names)
@@ -486,6 +490,251 @@ def save_generated_ocaml_tests(tp_name: str, source_code: str) -> Path:
     return test_path
 
 
+def get_c_tests_dir(tp_name: str) -> Path:
+    """Return the directory containing the shared Criterion tests for one TP."""
+    return SUBMISSIONS_DIR / tp_name / CRITERION_TESTS_DIR
+
+
+def get_c_compile_log_path(student_dir: Path) -> Path:
+    """Return the path of the C compilation log for one student render."""
+    return student_dir / C_COMPILE_LOG_FILENAME
+
+
+def get_c_exec_log_path(student_dir: Path) -> Path:
+    """Return the path of the C execution log for one student render."""
+    return student_dir / C_EXEC_LOG_FILENAME
+
+
+def get_c_test_log_path(tp_name: str) -> Path:
+    """Return the path of the Criterion plain-text output for one TP."""
+    return get_c_tests_dir(tp_name) / C_TEST_LOG_FILENAME
+
+
+def get_c_test_json_path(tp_name: str) -> Path:
+    """Return the path of the Criterion JSON output for one TP."""
+    return get_c_tests_dir(tp_name) / C_TEST_JSON_FILENAME
+
+
+def get_c_test_html_path(tp_name: str) -> Path:
+    """Return the path of the HTML rendering generated from the Criterion test log."""
+    return get_c_tests_dir(tp_name) / C_TEST_HTML_FILENAME
+
+
+def get_c_test_source_path(tp_name: str) -> Path:
+    """Return the path of the Criterion test source file for one TP."""
+    return get_c_tests_dir(tp_name) / "test_code_rendu.c"
+
+
+def get_c_test_makefile_path(tp_name: str) -> Path:
+    """Return the path of the Makefile used to run Criterion for one TP."""
+    return get_c_tests_dir(tp_name) / "Makefile"
+
+
+def get_c_test_generation_llm_response_key(tp_name: str) -> str:
+    """Return the session key used to store the last AI-generated Criterion test suite response."""
+    return f"c_tests_llm_response::{tp_name}"
+
+
+def get_c_test_overwrite_authorization_key(tp_name: str) -> str:
+    """Return the session key used to unlock overwriting an existing Criterion test suite."""
+    return f"c_tests_allow_overwrite::{tp_name}"
+
+
+def c_test_suite_is_present(tp_name: str) -> bool:
+    """Return whether a generated Criterion test suite already exists for one TP."""
+    return get_c_test_source_path(tp_name).exists()
+
+
+def ensure_c_tests_makefile(tp_name: str) -> Path:
+    """Ensure the shared Criterion test directory contains a Makefile with the expected targets."""
+    tests_dir = get_c_tests_dir(tp_name)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    makefile_path = get_c_test_makefile_path(tp_name)
+    if not makefile_path.exists():
+        makefile_path.write_text(C_CRITERION_MAKEFILE_TEMPLATE, encoding="utf-8")
+        read_text_file.clear()
+    return makefile_path
+
+
+def save_generated_c_tests(tp_name: str, source_code: str) -> Path:
+    """Persist a generated Criterion test suite and ensure the shared scaffold exists."""
+    tests_dir = get_c_tests_dir(tp_name)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    ensure_c_tests_makefile(tp_name)
+
+    test_path = get_c_test_source_path(tp_name)
+    test_path.write_text(source_code.rstrip() + "\n", encoding="utf-8")
+    read_text_file.clear()
+    return test_path
+
+
+def render_c_tests_generation_mode(tp_name: str) -> None:
+    """Render the AI-assisted Criterion test generation workflow for one practical session."""
+    bareme_data = get_bareme_data(tp_name)
+    subject_pdf = find_subject_pdf(tp_name)
+    tex_files = find_subject_tex_files(tp_name)
+    markdown_files = find_subject_markdown_files(tp_name)
+    bareme_path = get_bareme_path(tp_name)
+    tests_dir = get_c_tests_dir(tp_name)
+    test_source_path = get_c_test_source_path(tp_name)
+    makefile_path = get_c_test_makefile_path(tp_name)
+    test_suite_exists = c_test_suite_is_present(tp_name)
+    overwrite_authorization_key = get_c_test_overwrite_authorization_key(tp_name)
+    overwrite_is_authorized = bool(st.session_state.get(overwrite_authorization_key, False))
+
+    st.title(f"Génération automatisée de tests C - `{tp_name}`")
+    st.caption(
+        "Mode de préparation du banc de tests Criterion partagé, avec génération assistée par IA du fichier `test_code_rendu.c` quand il n'existe pas encore."
+    )
+
+    subject_col, tests_col = st.columns((1.1, 1), gap="large")
+
+    with subject_col:
+        render_subject_panel(tp_name, height=1540)
+
+    with tests_col:
+        st.subheader("Banc de tests C / Criterion")
+        if test_suite_exists:
+            st.write(
+                "Ce mode prépare le dossier `criterion_tests/` du TP courant. Un fichier de tests existe déjà ; son écrasement n'est possible qu'après déverrouillage explicite puis confirmation de génération."
+            )
+        else:
+            st.write(
+                "Ce mode prépare le dossier `criterion_tests/` du TP courant et génère le fichier `test_code_rendu.c` lorsqu'il est absent."
+            )
+
+        st.caption(f"Dossier cible : `{tests_dir}`")
+        if test_suite_exists:
+            st.success("Un fichier `test_code_rendu.c` existe déjà pour ce TP.")
+            if overwrite_is_authorized:
+                st.warning(
+                    "L'écrasement du fichier existant a été explicitement autorisé pour ce TP. La génération ci-dessous remplacera `criterion_tests/test_code_rendu.c`."
+                )
+                if st.button(
+                    "Verrouiller à nouveau la protection contre l'écrasement",
+                    width="stretch",
+                    help="Réactive la protection et masque le bouton de génération destructive.",
+                ):
+                    st.session_state[overwrite_authorization_key] = False
+                    st.rerun()
+            else:
+                st.caption(
+                    "La protection contre l'écrasement est active. Déverrouillez-la explicitement si vous souhaitez remplacer le banc de tests actuel par une nouvelle génération IA."
+                )
+                if st.button(
+                    "⚠️ Autoriser l'écrasement du fichier de tests existant",
+                    width="stretch",
+                    help="Déverrouille le second bouton de génération pour ce TP seulement, sans lancer encore la génération.",
+                ):
+                    st.session_state[overwrite_authorization_key] = True
+                    st.rerun()
+
+            if test_source_path.exists():
+                with st.expander("Afficher le fichier de tests existant"):
+                    with st.container(height=520):
+                        st.code(read_text_file(str(test_source_path)), language="c", line_numbers=True, wrap_lines=True)
+
+        missing_files = [
+            filename for filename in ("Makefile", "test_code_rendu.c") if not (tests_dir / filename).exists()
+        ]
+        if missing_files:
+            st.info("Fichiers absents avant génération : " + ", ".join(f"`{name}`" for name in missing_files))
+
+        if not bareme_path.exists():
+            st.warning(
+                "Aucun `bareme.json` n'est encore sauvegardé pour ce TP ; la génération utilisera le barème courant en session si nécessaire."
+            )
+
+        generation_is_unlocked = (not test_suite_exists) or overwrite_is_authorized
+        if test_suite_exists and not generation_is_unlocked:
+            st.info(
+                "Le bouton de génération reste masqué tant que l'autorisation explicite d'écrasement n'a pas été donnée."
+            )
+
+        if generation_is_unlocked and st.button(
+            "✨ Générer le fichier de tests C par IA ? ✨",
+            width="stretch",
+            help=(
+                "Analyse le sujet PDF, ses sources et le barème courant pour proposer un fichier `test_code_rendu.c` compatible Criterion. "
+                f"{help_credits_llm}"
+            ),
+        ):
+            overwrite_instruction = (
+                "- tu peux remplacer le fichier existant `test_code_rendu.c` par une nouvelle version complète et cohérente ;"
+                if test_suite_exists
+                else "- crée le fichier `test_code_rendu.c` attendu dans le dossier de tests ;"
+            )
+            prompt = f"""
+Analyse ce sujet de Travaux Pratiques d'Informatique en MP2I.
+
+Je te donne :
+- le sujet du TP, avec ses sources LaTeX ou Markdown,
+- le barème JSON courant du sujet.
+
+Je veux que tu génères le fichier C complet `test_code_rendu.c` pour un banc de tests avec Criterion.
+
+Contraintes impératives :
+- ne renvoie QUE le code source C final, sans verbiage inutile ni explication, sans Markdown, sans bloc de code ;
+- le fichier sera compilé séparément avec `code_rendu.c` par un `Makefile`, donc n'inclus jamais `code_rendu.c` directement ;
+- utilise la bibliothèque Criterion et écris un banc de tests sérieux, lisible et abondant ;
+- si un header `code_rendu.h` est pertinent, tu peux l'inclure, sinon déclare explicitement les prototypes dont tu as besoin ;
+- privilégie des assertions explicites, des cas nominaux, des cas limites et des cas d'erreur ;
+- si l'API exacte n'est pas entièrement déductible, construis beaucoup de tests génériques utiles à partir du sujet et des exemples présents ;
+{overwrite_instruction}
+
+Le résultat doit constituer un banc de très nombreux tests sérieux, pédagogique et directement exploitable, sans erreur de compilation évidente.
+            """
+
+            system_prompt = SYSTEM_PROMPT
+            json_paths: list[Path] = []
+            if bareme_path.exists():
+                json_paths.append(bareme_path)
+
+            additional_messages: list[str] | None = None
+            if not json_paths:
+                additional_messages = [
+                    "Barème courant en mémoire de session :\n" + json.dumps(bareme_data, ensure_ascii=False, indent=2)
+                ]
+
+            source_paths: list[Path] = list(tex_files) + list(markdown_files)
+            with st.spinner("Génération du fichier de tests C en cours grâce à l'IA..."):
+                response = response_from_llm(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    additionnal_messages=additional_messages,
+                    paths_pdf=[subject_pdf] if subject_pdf is not None else None,
+                    paths_json=json_paths or None,
+                    paths_source=source_paths or None,
+                    force_json_response=False,
+                )
+
+            st.session_state[get_c_test_generation_llm_response_key(tp_name)] = response
+            generated_tests = strip_llm_code_fences(response)
+            if generated_tests is None:
+                st.error("La réponse de l'IA n'a pas pu être convertie en fichier de tests C exploitable.")
+            else:
+                ensure_c_tests_makefile(tp_name)
+                test_path = save_generated_c_tests(tp_name, generated_tests)
+                st.session_state[overwrite_authorization_key] = False
+                st.success(f"Le fichier de tests a été généré et sauvegardé dans `{test_path.name}`.")
+                st.rerun()
+
+        generation_llm_response_key = get_c_test_generation_llm_response_key(tp_name)
+        if generation_llm_response_key in st.session_state:
+            with st.expander("Afficher la réponse brute de l'IA pour les tests C"):
+                with st.container(height=520):
+                    st.write(st.session_state[generation_llm_response_key])
+
+        if tests_dir.exists():
+            ensure_c_tests_makefile(tp_name)
+            st.subheader("Contenu actuel du dossier `criterion_tests/`")
+            current_files = []
+            for path in sorted(tests_dir.iterdir(), key=lambda item: item.name.lower()):
+                current_files.append({"Fichier": path.name, "Type": "Dossier" if path.is_dir() else "Fichier"})
+            if current_files:
+                st.dataframe(current_files, width="stretch", hide_index=True)
+
+
 def render_ocaml_tests_generation_mode(tp_name: str) -> None:
     """Render the AI-assisted OCaml test generation workflow for one practical session."""
     bareme_data = get_bareme_data(tp_name)
@@ -665,6 +914,11 @@ def get_ocaml_compiled_exe_path(tp_name: str, student_name: str) -> Path:
     return Path("/tmp") / f"test_ocaml__{slugify_for_filename(tp_name)}__{slugify_for_filename(student_name)}.exe"
 
 
+def get_c_compiled_exe_path(tp_name: str, student_name: str) -> Path:
+    """Return the path of the compiled C binary for one student render."""
+    return Path("/tmp") / f"test_c__{slugify_for_filename(tp_name)}__{slugify_for_filename(student_name)}.exe"
+
+
 def compile_ocaml_submission(
     student_dir: Path, code_path: Path, compiled_exe_path: Path
 ) -> tuple[int, Path, Path, str]:
@@ -673,6 +927,30 @@ def compile_ocaml_submission(
     exit_code, output = run_command_and_capture_output(
         ["ocamlopt", "-color", "never", "-ccopt", "-static", "-o", str(compiled_exe_path), code_path.name],
         cwd=student_dir,
+        log_path=log_path,
+    )
+    return exit_code, compiled_exe_path, log_path, output
+
+
+def compile_c_submission(
+    student_dir: Path, code_path: Path, compiled_exe_path: Path, tp_name: str
+) -> tuple[int, Path, Path, str]:
+    """Compile one C submission (consisting of a list of files), and persist the compiler output."""
+    log_path = get_c_compile_log_path(student_dir)
+
+    tests_dir = get_ocaml_tests_dir(tp_name)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+
+    criterion_code_path = tests_dir / code_path.basename()
+    shutil.copy2(code_path, criterion_code_path)
+
+    command = [
+        "make",
+        "all"
+    ]
+    exit_code, output = run_command_and_capture_output(
+        command,
+        cwd=tests_dir,
         log_path=log_path,
     )
     return exit_code, compiled_exe_path, log_path, output
@@ -696,6 +974,18 @@ def interpret_ocaml_submission_in_nsjail(
 def run_ocaml_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -> tuple[int, Path, str]:
     """Run one compiled OCaml binary inside NsJail and persist the output."""
     log_path = get_ocaml_exec_log_path(student_dir)
+    nsjail_config = ROOT_DIR / "nsjail_config.cfg"
+    exit_code, output = run_command_and_capture_output(
+        ["nsjail", "--config", str(nsjail_config), "--", str(compiled_exe_path)],
+        cwd=student_dir,
+        log_path=log_path,
+    )
+    return exit_code, log_path, output
+
+
+def run_c_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -> tuple[int, Path, str]:
+    """Run one compiled C binary inside NsJail and persist the output."""
+    log_path = get_c_exec_log_path(student_dir)
     nsjail_config = ROOT_DIR / "nsjail_config.cfg"
     exit_code, output = run_command_and_capture_output(
         ["nsjail", "--config", str(nsjail_config), "--", str(compiled_exe_path)],
@@ -816,6 +1106,36 @@ def run_ocaml_dune_tests(
         artifact_path.write_text(ansi_log_to_html(output), encoding="utf-8")
     read_text_file.clear()
     return exit_code, log_path, artifact_path, output
+
+
+def run_c_criterion_tests(
+    tp_name: str, code_path: Path, json_mode: bool
+) -> tuple[int, Path, Path, str]:
+    """Copy one C submission into the shared Criterion tests and run them."""
+    tests_dir = get_c_tests_dir(tp_name)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    ensure_c_tests_makefile(tp_name)
+
+    criterion_code_path = tests_dir / code_path.basename()
+    shutil.copy2(code_path, criterion_code_path)
+
+    plain_log_path = get_c_test_log_path(tp_name)
+    artifact_path = get_c_test_json_path(tp_name) if json_mode else get_c_test_html_path(tp_name)
+    command = ["make", "run_tests_criterion_json" if json_mode else "run_tests_criterion_nojson"]
+
+    exit_code, output = run_command_and_capture_output(
+        command,
+        cwd=tests_dir,
+        log_path=artifact_path if json_mode else plain_log_path,
+        timeout=120,
+    )
+
+    if json_mode:
+        artifact_path.write_text(output, encoding="utf-8")
+    else:
+        artifact_path.write_text(ansi_log_to_html(output), encoding="utf-8")
+    read_text_file.clear()
+    return exit_code, plain_log_path, artifact_path, output
 
 
 def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]:
@@ -1801,7 +2121,11 @@ def render_submissions_mode(tp_name: str) -> None:
     total_points, total_points_bareme, note_sur_20 = get_current_grading_summary(
         tp_name, selected_student_name, bareme_questions
     )
-    ocaml_tests_note_sur_20 = get_ocaml_tests_note_sur_20(tp_name, selected_student_name)
+    tests_note_sur_20 = (
+        get_ocaml_tests_note_sur_20(tp_name, selected_student_name)
+        if code_path is not None and code_path.suffix == ".ml"
+        else None
+    )
 
     st.title(f"Évaluation des rendus de TP - `{tp_name}`")
     st.caption(
@@ -1812,8 +2136,8 @@ def render_submissions_mode(tp_name: str) -> None:
     col_etudiant.metric("**Étudiant sélectionné**", f"**{selected_student_name}**" or "aucun")
     col_total.metric("**Points obtenus**", f"{total_points} / {total_points_bareme}")
     col_note.metric("**Note par lecture des rendus**", f"{note_sur_20}/20")
-    top_ocaml_tests_note_metric = col_tests_note.empty()
-    render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, ocaml_tests_note_sur_20)
+    top_tests_note_metric = col_tests_note.empty()
+    render_ocaml_tests_note_metric(top_tests_note_metric, tests_note_sur_20)
 
     subject_col, grading_col, student_col = st.columns((0.7, 0.3, 0.8), gap="small")
 
@@ -2013,14 +2337,128 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
     )
 
     if selected_student_dir is None or code_path is None:
-        st.info("Sélectionnez d'abord un rendu étudiant contenant un fichier `code_rendu.ml` pour activer ces actions.")
+        st.info("Sélectionnez d'abord un rendu étudiant contenant un fichier `code_rendu.ml` ou `code_rendu.c` pour activer ces actions.")
         return
 
-    if code_path.suffix != ".ml":
-        st.warning("Les actions à la demande sont pour l'instant réservées aux rendus OCaml (e.g. `code_rendu.ml`).")
-        # TODO: implémenter les fonctionnalités d'actions à la demande, pour les rendus en langage C (e.g. `code_rendu.c`)
-        c_tools_tabs = st.tabs(["A - Compiler", "B - Exécuter dans la safebox", "C - Tests complets"])
-        # TODO: inspire toi de ce qu'on a fait pour OCaml, mais cette fois, fait le pour le langage C, pour cette partie là.
+    if code_path.suffix == ".c":
+        compiled_exe_path = get_c_compiled_exe_path(tp_name, selected_student_name or "")
+        c_tools_tabs = st.tabs(["A - Lecture du Makefile", "B - Compiler", "C - Exécuter dans la safebox", "D - Tests complets"])
+
+        with c_tools_tabs[0]:
+            st.write("Affichage du fichier Makefile qui sera utilisé pour savoir gérer la compilation du `code_rendu.c` par l'étudiant")
+            makefile_path = get_c_test_makefile_path(tp_name)
+            st.code(read_text_file(str(makefile_path)), language="makefile", line_numbers=True, wrap_lines=True, height=520)
+
+        with c_tools_tabs[1]:
+            st.write("Compiler les fichiers C rendus, sans l'exécuter immédiatement.")
+            compile_button_key = f"c_compile_button::{tp_name}::{selected_student_name}"
+            if st.button("Compiler les rendus C (avec gcc)", key=compile_button_key, type="primary", width='stretch'):
+                code_paths = [
+                    code_path,
+                    "main.c",
+                ]
+                exit_code, compiled_exe_path, log_path, output = compile_c_submission(selected_student_dir, code_paths, compiled_exe_path, tp_name)
+                if exit_code == 0:
+                    st.success(f"Compilation réussie, terminée avec succès, le binaire est disponible dans {compiled_exe_path}.")
+                else:
+                    st.warning(f"Compilation échouée, terminée avec le code de retour {exit_code}.")
+
+                st.markdown("**Sortie de cette commande Bash (log)**")
+                render_code_log(
+                    log_path,
+                    "bash",
+                    "Aucun log de compilation n'est encore disponible. Cliquez sur le bouton de compilation pour en générer un.",
+                )
+
+        with c_tools_tabs[2]:
+            st.write("Exécuter le binaire compilé dans une sandbox NsJail.")
+            run_button_key = f"c_run_button::{tp_name}::{selected_student_name}"
+            if st.button("Exécuter dans une safebox (NsJail)", key=run_button_key, type="primary", width='stretch'):
+                if not compiled_exe_path.exists():
+                    st.error(
+                        f"Le binaire {compiled_exe_path} n'existe pas encore : compilez d'abord le rendu C."
+                    )
+                else:
+                    exit_code, log_path, output = run_c_submission_in_nsjail(selected_student_dir, compiled_exe_path)
+                    if exit_code == 0:
+                        st.success("Exécution NsJail terminée avec succès.")
+                    else:
+                        st.warning(f"Exécution NsJail terminée avec le code de retour {exit_code}.")
+
+                    render_code_log(
+                        log_path,
+                        "bash",
+                        "Aucun log d'exécution n'est encore disponible. Cliquez sur le bouton d'exécution pour en générer un.",
+                    )
+
+        with c_tools_tabs[3]:
+            st.write("Copier le rendu C dans le banc de tests Criterion partagé, puis lancer les tests préparés à la main ou générés par IA.")
+            test_button_key = f"c_test_button::{tp_name}::{selected_student_name}"
+            tests_dir = get_c_tests_dir(tp_name)
+            test_source_path = get_c_test_source_path(tp_name)
+            makefile_path = get_c_test_makefile_path(tp_name)
+
+            if not tests_dir.exists():
+                st.info(
+                    f"Le dossier partagé des tests est absent pour ce TP : {tests_dir}. Il sera créé automatiquement au premier lancement."
+                )
+            elif not test_source_path.exists():
+                st.warning(
+                    "Aucun fichier `test_code_rendu.c` n'est encore présent dans `criterion_tests/`. Préparez d'abord ce banc de tests dans le mode « 2.b - Génération IA de tests C » ou ajoutez-le manuellement."
+                )
+            elif not makefile_path.exists():
+                st.warning(
+                    "Le fichier `criterion_tests/Makefile` est absent ; il sera généré automatiquement au lancement des tests."
+                )
+
+            if st.button("Lancer les tests (Criterion)", key=test_button_key, type="primary", width='stretch'):
+                if not test_source_path.exists():
+                    st.error(
+                        "Le fichier `criterion_tests/test_code_rendu.c` est absent. Préparez d'abord le banc de tests C."
+                    )
+                else:
+                    exit_code, log_path, artifact_path, output = run_c_criterion_tests(
+                        tp_name, code_path, json_mode=False
+                    )
+                    if exit_code == 0:
+                        st.success(f"Tests Criterion terminés entièrement avec succès. Le rendu HTML a été généré dans `{artifact_path.name}`.")
+                    else:
+                        st.warning(
+                            f"Tests Criterion terminés avec une erreur, et le code de retour {exit_code}. Le rendu a-t-il été généré dans `{artifact_path.name}` ?"
+                        )
+
+                    exit_code_json, log_path_json, artifact_path_json, output_json = run_c_criterion_tests(
+                        tp_name, code_path, json_mode=True
+                    )
+
+                    st.markdown("**Sortie de cette commande Bash (log)**")
+                    test_html_tab, test_log_tab, test_json_tab = st.tabs(["Jolie sortie", "Log brut", "JSON Criterion"])
+                    with test_html_tab:
+                        render_html_log(
+                            artifact_path,
+                            "Aucun rendu HTML des tests Criterion n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                        )
+                    with test_log_tab:
+                        render_code_log(
+                            log_path,
+                            "bash",
+                            "Aucun log de tests Criterion n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                        )
+                    with test_json_tab:
+                        if artifact_path_json.exists():
+                            json_payload = load_json_object(artifact_path_json)
+                            if json_payload is None:
+                                st.code(
+                                    read_text_file(str(artifact_path_json)),
+                                    language="json",
+                                    line_numbers=True,
+                                    wrap_lines=True,
+                                    height=520,
+                                )
+                            else:
+                                st.json(json_payload)
+                        else:
+                            st.warning("Aucune sortie JSON exploitable n'a été produite par les tests Criterion.")
     else:
         compiled_exe_path = get_ocaml_compiled_exe_path(tp_name, selected_student_name or "")
         ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Interpréter dans la safebox", "C - Exécuter dans la safebox", "D - Tests complets"])
@@ -2119,7 +2557,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                         json_payload = load_json_object(artifact_path_json)
                         if json_payload is None:
                             set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                            render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
+                            render_ocaml_tests_note_metric(top_tests_note_metric, None)
                             st.error(
                                 f"Le fichier JSON/HTML {artifact_path_json.name} n'a pas pu être lu correctement."
                             )
@@ -2137,18 +2575,18 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                                     compute_ocaml_tests_note_sur_20(success, failures),
                                 )
 
-                                render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, ocaml_tests_note_sur_20)
+                                render_ocaml_tests_note_metric(top_tests_note_metric, ocaml_tests_note_sur_20)
                                 render_ocaml_tests_note_metric(st, ocaml_tests_note_sur_20)
                                 st.caption(
                                     f"Résumé des tests OCaml : {success} succès, {failures} échec{'s' if int(str(failures)) > 0 else ''}, temps d'exécution {time}s."
                                 )
                             else:
                                 set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                                render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
+                                render_ocaml_tests_note_metric(top_tests_note_metric, None)
                                 st.warning("Le contenu JSON des tests n'a pas le format attendu.")
                     else:
                         set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                        render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
+                        render_ocaml_tests_note_metric(top_tests_note_metric, None)
                         st.warning("Aucune sortie JSON exploitable n'a été produite par les tests Dune.")
                     # HTML, by default
                     # else:
@@ -2372,28 +2810,6 @@ def render_individual_progress_mode() -> None:
             )
         st.bar_chart(reference_rows, x="TP", y=["Note /20", "Moyenne personnelle"], stack=False)
         st.caption("Chaque TP est comparé à la moyenne annuelle de l'étudiant pour repérer rapidement les hausses et les baisses.")
-
-    # st.subheader("Rythme de réussite")
-    # success_chart = (
-    #     alt.Chart(alt.Data(values=timeline_rows))
-    #     .mark_area(opacity=0.55)
-    #     .encode(
-    #         x=alt.X("TP:N", sort=None, title="TP"),
-    #         y=alt.Y("Taux de réussite:Q", scale=alt.Scale(domain=[0, 1]), title="Taux de réussite"),
-    #         color=alt.Color(
-    #             "Taux de réussite:Q",
-    #             scale=alt.Scale(domain=[0, 1], range=["#ef9a9a", "#1e88e5"]),
-    #             legend=None,
-    #         ),
-    #         tooltip=[
-    #             alt.Tooltip("Étudiant:N", title="Étudiant"),
-    #             alt.Tooltip("TP:N", title="TP"),
-    #             alt.Tooltip("Taux de réussite:Q", title="Taux", format=".1%"),
-    #         ],
-    #     )
-    #     .properties(height=220, title=f"Taux de réussite de {selected_student_name}")
-    # )
-    # st.altair_chart(success_chart, width="stretch")
 
     st.subheader("Historique détaillé")
     st.dataframe(evaluated_rows, width="stretch", hide_index=True)

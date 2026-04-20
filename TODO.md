@@ -51,7 +51,8 @@ nsjail --config ./nsjail_config.cfg -- ./test_ocaml.exe
 
 #### Pour le C ?
 
-TODO: intégrer Criterion et AFL++
+- [ ] TODO: intégrer Criterion
+- [ ] TODO: intégrer AFL++ ??
 
 ```bash
 gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_rendu.c -lm

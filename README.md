@@ -79,6 +79,17 @@ Le mode Génération automatisée de tests OCaml permet de :
 - créer au besoin le squelette Dune minimal via `dune` et `dune-project` ;
 - conserver les fichiers déjà présents dès qu'un banc de tests a été préparé à la main.
 
+### Mode `2.b - Génération automatisée de tests C`
+
+Le mode Génération automatisée de tests C permet de :
+
+- préparer le dossier partagé `criterion_tests/` du TP courant ;
+- détecter l'absence d'un fichier `test_code_rendu.c` avant d'écrire quoi que ce soit ;
+- analyser le sujet, ses sources et le barème courant pour proposer un banc de tests C ;
+- générer un fichier `test_code_rendu.c` compatible avec Criterion ;
+- créer au besoin un `Makefile` minimal exposant `run_tests_criterion_nojson` et `run_tests_criterion_json` ;
+- conserver les fichiers déjà présents dès qu'un banc de tests a été préparé à la main.
+
 ### Mode `3 - Évaluation des rendus`
 
 Le mode Évaluation des rendus permet de :
@@ -94,6 +105,8 @@ Le mode Évaluation des rendus permet de :
 - recharger automatiquement cette notation lors d'une réouverture du rendu.
 
 Pour les rendus OCaml, ce mode ajoute aussi des actions à la demande, déclenchées uniquement par bouton : compilation locale, exécution du binaire dans NsJail, puis lancement des tests Dune préparés à la main avec sauvegarde des logs et du rendu HTML coloré.
+
+Pour les rendus C, ce mode ajoute désormais des actions à la demande déclenchées uniquement par bouton : compilation locale avec `gcc`, exécution du binaire dans NsJail, puis copie du rendu dans `criterion_tests/` et lancement des tests Criterion via `make run_tests_criterion_nojson` et `make run_tests_criterion_json`, avec conservation des logs, du rendu HTML et de la sortie JSON.
 
 ![documentation-mode-2-évaluation-rendus-par-étudiant-1.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-1.png)
 ![documentation-mode-2-évaluation-rendus-par-étudiant-2.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-2.png)
@@ -160,9 +173,12 @@ Le mode Progression annuelle individuelle permet de :
 - `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini, depuis le dashboard aussi !) ;
 
 - `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.ml` : fichier de tests OCaml généré ou entretenu par le mode `2 - Génération automatisée de tests OCaml` ;
+- `rendus-des-etudiants/<tp>/criterion_tests/test_code_rendu.c` et `criterion_tests/Makefile` : banc de tests C / Criterion généré ou entretenu par le mode `2.b - Génération automatisée de tests C` ;
 
 - `rendus-des-etudiants/<tp>/<rendu>/ocamlopt_code_rendu.log` et `exec_code_rendu.log` : logs de compilation et d'exécution pour les rendus OCaml évalués à la demande ;
+- `rendus-des-etudiants/<tp>/<rendu>/gcc_code_rendu.log` et `exec_code_rendu.log` : logs de compilation et d'exécution pour les rendus C évalués à la demande ;
 - `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.log` et `test_code_rendu.html` : sortie brute et rendu HTML coloré des tests Dune exécutés à la demande.
+- `rendus-des-etudiants/<tp>/criterion_tests/test_code_rendu.log`, `test_code_rendu.html` et `test_code_rendu.json` : sortie brute, rendu HTML et sortie JSON des tests Criterion exécutés à la demande.
 
 ```json
 {
@@ -227,6 +243,8 @@ dune runtest
 ```
 
 Depuis le dashboard, le mode `2 - Génération automatisée de tests OCaml` peut produire automatiquement un `test_code_rendu.ml` quand il manque, puis le mode `3 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans [NsJail](https://nsjail.dev/), puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
+
+Le mode `2.b - Génération automatisée de tests C` peut de la même façon produire un `criterion_tests/test_code_rendu.c` et un `criterion_tests/Makefile`, puis le mode `3 - Évaluation des rendus` propose des boutons pour compiler le rendu C, l'exécuter dans [NsJail](https://nsjail.dev/) et lancer les tests Criterion via `make run_tests_criterion_nojson` ou `make run_tests_criterion_json`.
 
 ------
 
