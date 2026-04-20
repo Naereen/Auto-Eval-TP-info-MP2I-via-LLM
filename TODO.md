@@ -1,21 +1,20 @@
 # TODO
 
-## Fonctionnalités supplémentaires
+Ce document ne décrit pas les fonctionnalités déjà livrées. Il recense uniquement ce qu'il reste à implémenter, fiabiliser, tester ou clarifier.
 
-- TODO: Je veux pouvoir supporter des TP qui demanderaient des rendus de code source en *plusieurs fichiers*.
+## À implémenter
 
-- [x] pré-remplissage du mode barème par une proposition JSON issue d'un LLM/IA, avec injection directe dans l'éditeur courant.
-- TODO: fiabiliser et affiner la génération automatique du barème par LLM/IA depuis la lecture du sujet (LaTeX ou PDF).
+- Supporter des TP qui demandent des rendus de code source en plusieurs fichiers.
+- Ajouter une vue de statistiques de cohorte à l'échelle de l'année.
 
-- [x] pré-remplissage du mode évaluation par une proposition JSON issue d'un LLM/IA, avec injection directe dans l'éditeur courant.
-- TODO: fiabiliser et affiner la notation automatique par LLM/IA depuis le sujet, le barème, le code rendu et le compte-rendu étudiant.
+## À fiabiliser ou corriger
 
-- [x] l'ajout de vues des notes de la classe pour un TP fixé et donné.
+- Affiner la génération automatique du barème par LLM/IA à partir du sujet LaTeX, Markdown ou PDF.
+- Affiner la notation automatique par LLM/IA à partir du sujet, du barème, du code rendu et du compte-rendu étudiant.
+- Vérifier la robustesse des réponses JSON retournées par l'IA quand certaines pièces jointes sont absentes.
+- Mieux gérer les cas limites où un TP existe sans sujet PDF, sans sources complémentaires, ou avec des rendus partiels.
 
-- [x] l'ajout d'une vue de progression annuelle individuelle au fil des TP.
-- TODO: l'ajout de statistiques de cohorte classe au fil de l'année.
-
------------------------------------------------------
+## Tests manuels à faire
 
 ## Tester le mode Barème
 
@@ -46,13 +45,14 @@
 
 - Vérifier que la vue n'agrège que les TP disposant d'un `notes.json` pour l'étudiant choisi.
 - Vérifier que la moyenne annuelle est bien une moyenne non pondérée des notes par TP.
-- Vérifier la cohérence des statistiques globale de l'étudiant : min, max, médiane, écart-type.
+- Vérifier la cohérence des statistiques globales de l'étudiant : min, max, médiane, écart-type.
+- Vérifier que la pente de tendance affichée est cohérente avec les notes observées.
 - Vérifier que les graphiques restent lisibles quand un étudiant a beaucoup de TP notés sur l'année.
 
------------------------------------------------------
-
-## Maintenir la documentation
+## Dette documentaire et conventions
 
 - Garder les commentaires et docstrings Python en anglais.
 - Mettre à jour `README.md` et `TODO.md` en même temps que les évolutions fonctionnelles.
+- Réserver `README.md` aux fonctionnalités effectivement présentes dans le projet.
+- Réserver `TODO.md` aux travaux restants, validations manuelles et points de robustesse.
 - Conserver les textes visibles dans l'interface en français correct et accentué.

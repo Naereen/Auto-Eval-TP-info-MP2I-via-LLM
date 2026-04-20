@@ -13,6 +13,7 @@ import base64
 import json
 import statistics
 from pathlib import Path
+from typing import Final, TypedDict
 
 import altair as alt
 import streamlit as st
@@ -21,24 +22,78 @@ import streamlit as st
 from gemini_requests import response_from_llm, help_credits_llm
 
 
-# Parameters of the app and utility functions to manage the repository structure and persist grading data.
-ROOT_DIR = Path(__file__).resolve().parent
-SUBJECTS_DIR = ROOT_DIR / "sujets-de-travaux-pratiques"
-SUBMISSIONS_DIR = ROOT_DIR / "rendus-des-etudiants"
+# Repository layout and default values used across all dashboard modes.
+ROOT_DIR: Final[Path] = Path(__file__).resolve().parent
+SUBJECTS_DIR: Final[Path] = ROOT_DIR / "sujets-de-travaux-pratiques"
+SUBMISSIONS_DIR: Final[Path] = ROOT_DIR / "rendus-des-etudiants"
 # Preferred filenames are checked first before falling back to broader glob searches.
-CODE_CANDIDATES = ("code_rendu.c", "code_rendu.ml")
-REPORT_PDF_CANDIDATES = ("compte-rendu.pdf", "compte_rendu.pdf")
-REPORT_MD_CANDIDATES = ("compte-rendu.md", "compte_rendu.md")
-BAREME_FILENAME = "bareme.json"
-NOTES_FILENAME = "notes.json"
-DEFAULT_QUESTION_COUNT = 10
-DEFAULT_QUESTION_POINTS = 5
-APP_MODES = (
+CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "code_rendu.ml")
+REPORT_PDF_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.pdf", "compte_rendu.pdf")
+REPORT_MD_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.md", "compte_rendu.md")
+BAREME_FILENAME: Final[str] = "bareme.json"
+NOTES_FILENAME: Final[str] = "notes.json"
+DEFAULT_QUESTION_COUNT: Final[int] = 10
+DEFAULT_QUESTION_POINTS: Final[int] = 5
+APP_MODES: Final[tuple[str, ...]] = (
     "1 - Barème",
     "2 - Évaluation des rendus",
     "3 - Vue de la classe par TP",
     "4 - Progression annuelle individuelle",
 )
+
+
+# Typed payloads make the persisted JSON structures easier to reason about.
+class QuestionConfig(TypedDict):
+    """One normalized question entry stored in bareme.json."""
+
+    index: int
+    label: str
+    points: int
+
+
+class BaremeData(TypedDict):
+    """Normalized marking scheme stored per practical session."""
+
+    format_version: int
+    tp_name: str
+    question_count: int
+    total_points: int
+    questions: list[QuestionConfig]
+
+
+class GradedQuestion(TypedDict):
+    """One normalized grading entry aligned with a barème question."""
+
+    index: int
+    label: str
+    max_points: int
+    points_awarded: int
+
+
+class GradingData(TypedDict):
+    """Normalized grading sheet stored per student submission."""
+
+    format_version: int
+    tp_name: str
+    student_name: str
+    question_count: int
+    total_points_awarded: int
+    total_points_bareme: int
+    note_sur_20: float
+    questions: list[GradedQuestion]
+
+
+class NumericSummary(TypedDict):
+    """Compact summary used by classroom and annual dashboards."""
+
+    mean: float
+    median: float
+    min: float
+    max: float
+    stddev: float
+
+
+# Repository discovery and file loading helpers.
 
 
 def list_subdirectories(directory: Path) -> list[Path]:
@@ -172,7 +227,7 @@ def read_binary_file(path: str) -> bytes:
 
 def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]:
     """Create an in-memory marking scheme with numbered questions and default scores."""
-    questions = [
+    questions: list[QuestionConfig] = [
         {"index": index, "label": f"Question {index}", "points": DEFAULT_QUESTION_POINTS}
         for index in range(1, question_count + 1)
     ]
@@ -180,6 +235,7 @@ def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]
         "format_version": 1,
         "tp_name": tp_name,
         "question_count": question_count,
+        "total_points": sum(question["points"] for question in questions),
         "questions": questions,
     }
 
@@ -194,7 +250,7 @@ def normalize_bareme_data(tp_name: str, data: dict[str, object] | None) -> dict[
     question_count = max(1, question_count)
 
     raw_questions = data.get("questions", [])
-    normalized_questions: list[dict[str, object]] = []
+    normalized_questions: list[QuestionConfig] = []
     if isinstance(raw_questions, list):
         for index, question in enumerate(raw_questions[:question_count], start=1):
             points = DEFAULT_QUESTION_POINTS
@@ -271,7 +327,9 @@ def sync_bareme_widgets(tp_name: str, bareme_data: dict[str, object]) -> None:
         st.session_state[get_bareme_points_widget_key(tp_name, question_index)] = get_question_points(question)
 
 
-def set_bareme_data(tp_name: str, bareme_data: dict[str, object], *, sync_widgets: bool = True) -> dict[str, object]:
+def set_bareme_data(
+    tp_name: str, bareme_data: dict[str, object], *, sync_widgets: bool = True
+) -> dict[str, object]:
     """Normalize and store a TP marking scheme in session state, optionally syncing its widgets."""
     normalized_bareme = normalize_bareme_data(tp_name, bareme_data)
     st.session_state[get_bareme_session_key(tp_name)] = normalized_bareme
@@ -317,6 +375,9 @@ def build_bareme_from_llm_response(tp_name: str, response: object) -> tuple[dict
     candidate_bareme = dict(parsed_response)
     candidate_bareme["tp_name"] = tp_name
     return normalize_bareme_data(tp_name, candidate_bareme), None
+
+
+# Grading helpers keep the editor, saved JSON, and AI proposals aligned.
 
 
 def get_grading_llm_response_key(tp_name: str, student_name: str) -> str:
@@ -380,7 +441,7 @@ def build_default_grading_data(
     tp_name: str, student_name: str, bareme_questions: list[dict[str, object]]
 ) -> dict[str, object]:
     """Create default grading data for one student from the current marking scheme."""
-    graded_questions = []
+    graded_questions: list[GradedQuestion] = []
     for question in bareme_questions:
         graded_questions.append(
             {
@@ -426,7 +487,7 @@ def normalize_grading_data(
             if isinstance(raw_index, int) and isinstance(raw_points_awarded, (int, float)):
                 persisted_by_index[raw_index] = int(raw_points_awarded)
 
-    normalized_questions = []
+    normalized_questions: list[GradedQuestion] = []
     total_points_awarded = 0
     total_points_bareme = sum(get_question_points(question) for question in bareme_questions)
     for question in bareme_questions:
@@ -577,6 +638,9 @@ def summarize_numeric_values(values: list[float]) -> dict[str, float]:
         "max": round(max(values), 2),
         "stddev": round(statistics.pstdev(values), 2) if len(values) > 1 else 0.0,
     }
+
+
+# Statistics helpers power the class and yearly synthesis views.
 
 
 def compute_linear_trend_slope(values: list[float]) -> float:
@@ -825,19 +889,19 @@ def get_bareme_questions(bareme_data: dict[str, object]) -> list[dict[str, objec
     return raw_questions if isinstance(raw_questions, list) else []
 
 
-def get_question_index(question: dict[str, object]) -> int:
+def get_question_index(question: QuestionConfig | GradedQuestion | dict[str, object]) -> int:
     """Extract a validated question index from a normalized question entry."""
     raw_index = question.get("index", 0)
     return raw_index if isinstance(raw_index, int) else 0
 
 
-def get_question_label(question: dict[str, object]) -> str:
+def get_question_label(question: QuestionConfig | GradedQuestion | dict[str, object]) -> str:
     """Extract a display label from a normalized question entry."""
     raw_label = question.get("label", "")
     return raw_label if isinstance(raw_label, str) else ""
 
 
-def get_question_points(question: dict[str, object]) -> int:
+def get_question_points(question: QuestionConfig | dict[str, object]) -> int:
     """Extract a validated integer score from a normalized question entry."""
     raw_points = question.get("points", 0)
     return int(raw_points) if isinstance(raw_points, (int, float)) else 0
@@ -885,14 +949,14 @@ def update_all_question_points(tp_name: str, points: int) -> dict[str, object]:
     return set_bareme_data(tp_name, updated_bareme)
 
 
+# Rendering helpers split the UI by workflow so each mode stays readable.
+
+
 def render_pdf(path: Path, height: int = 720) -> None:
     """Embed a local PDF in the Streamlit page through a data URL."""
     encoded = base64.b64encode(read_binary_file(str(path))).decode("ascii")
 
-    # On ajoute les paramètres après le base64, séparés par un '#'
-    # pagemode=none : masque le menu latéral
-    # view=FitH : ajuste à la largeur de l'iframe
-    # toolbar=1 : garde la barre d'outils (0 pour masquer)
+    # Keep the embedded PDF readable while avoiding the left-side page thumbnails.
     pdf_params = "#pagemode=none&view=FitH&toolbar=1"
 
     src_url = f"data:application/pdf;base64,{encoded}{pdf_params}"
@@ -936,14 +1000,16 @@ def render_subject_panel(tp_name: str) -> None:
 
     if markdown_files:
         markdown_names = ", ".join(f"`{path.name}`" for path in markdown_files)
-        st.caption(f"Sources LaTeX détectées : {markdown_names}")
+        st.caption(f"Sources Markdown détectées : {markdown_names}")
 
 
 def render_bareme_mode(tp_name: str) -> None:
     """Render the marking scheme editor and persist it in the session state."""
 
     st.title(f"Rédaction du barème de notation - `{tp_name}`")
-    st.caption("Mode de préparation du barème du TP sélectionné, avec sauvegarde locale et rechargement, par sujet (fichiers JSON).")
+    st.caption(
+        "Mode de préparation du barème du TP sélectionné, avec sauvegarde locale, rechargement et proposition assistée par IA."
+    )
 
     bareme_data = get_bareme_data(tp_name)
     question_count = get_bareme_question_count(bareme_data)
@@ -1005,16 +1071,11 @@ def render_bareme_mode(tp_name: str) -> None:
                 response = response_from_llm(
                     prompt=prompt,
                     system_prompt=system_prompt,
-                    # additionnal_messages=None,
                     paths_pdf=[subject_pdf],
-                    # paths_json=None,
                     paths_source=
                         tex_files
                         + markdown_files
-                        # + ocaml_files  # TODO: support this!
-                        # + c_files  # TODO: support this!
                     ,
-                    # model_name=default_model,
                     force_json_response=True,
                 )
             st.session_state[get_bareme_llm_response_key(tp_name)] = response
@@ -1028,12 +1089,11 @@ def render_bareme_mode(tp_name: str) -> None:
                 st.success("Le barème proposé par l'IA a été injecté dans l'éditeur courant.")
                 st.rerun()
 
-        llm_response_key = get_bareme_llm_response_key(tp_name)
-        if llm_response_key in st.session_state:
-            with st.expander("Afficher la réponse brute de l'IA (JSON)"):
+        bareme_llm_response_key = get_bareme_llm_response_key(tp_name)
+        if bareme_llm_response_key in st.session_state:
+            with st.expander("Afficher la réponse brute de l'IA pour le barème (JSON)"):
                 with st.container(height=520):
-                    st.markdown("#### Dernier résultat JSON proposé par l'IA")
-                    st.json(st.session_state[llm_response_key])
+                    st.json(st.session_state[bareme_llm_response_key])
 
         if st.session_state[uniform_points_state_key]:
             uniform_points = int(
@@ -1055,7 +1115,7 @@ def render_bareme_mode(tp_name: str) -> None:
             question_count = get_bareme_question_count(bareme_data)
             questions = get_bareme_questions(bareme_data)
 
-        updated_questions: list[dict[str, object]] = []
+        updated_questions: list[QuestionConfig] = []
         questions_container = st.container(height=550, border=True)
         with questions_container:
             st.caption("Édition du barème par question")
@@ -1113,8 +1173,8 @@ def render_bareme_mode(tp_name: str) -> None:
 
 def render_submissions_mode(tp_name: str) -> None:
     """Render the original submission review workflow for a practical session."""
-    student_dirs = discover_student_dirs(tp_name)
-    student_names = [path.name for path in student_dirs]
+    student_dirs: list[Path] = discover_student_dirs(tp_name)
+    student_names: list[str] = [path.name for path in student_dirs]
     bareme_data = get_bareme_data(tp_name)
     bareme_questions = get_bareme_questions(bareme_data)
     selected_student_name = st.sidebar.selectbox(
@@ -1124,13 +1184,13 @@ def render_submissions_mode(tp_name: str) -> None:
         placeholder="Aucun rendu disponible",
     )
 
-    selected_student_dir = None
+    selected_student_dir: Path | None = None
     if selected_student_name:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
-    code_path = None
-    report_pdf = None
-    report_md = None
+    code_path: Path | None = None
+    report_pdf: Path | None = None
+    report_md: Path | None = None
     if selected_student_dir is not None:
         code_path = find_student_code(selected_student_dir)
         report_pdf = find_student_report_pdf(selected_student_dir)
@@ -1148,7 +1208,6 @@ def render_submissions_mode(tp_name: str) -> None:
         "Mode d'évaluation des rendus pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
     )
     col_rendus, col_etudiant, col_total, col_note = st.columns(4)
-    # col_tp.metric("Nom de ce TP", f"`{tp_name}`")
     col_rendus.metric("Nombre de rendus détectés", len(student_dirs))
     col_etudiant.metric("Étudiant sélectionné", f"**{selected_student_name}**" or "aucun")
     col_total.metric("Points obtenus", f"{total_points} / {total_points_bareme}")
@@ -1218,7 +1277,7 @@ def render_submissions_mode(tp_name: str) -> None:
                     additional_messages: list[str] | None = None
                     if not json_paths:
                         additional_messages = [
-                            "Barème JSON courant :\n" + json.dumps(normalize_bareme_data(tp_name, bareme_data), ensure_ascii=False, indent=2)
+                            "Barème JSON courant :\n" + json.dumps(bareme_data, ensure_ascii=False, indent=2)
                         ]
 
                     with st.spinner("Requête à l'IA en cours..."):
@@ -1250,11 +1309,10 @@ def render_submissions_mode(tp_name: str) -> None:
                 if grading_llm_response_key in st.session_state:
                     with st.expander("Afficher la réponse brute de l'IA pour la notation (JSON)"):
                         with st.container(height=420):
-                            # st.markdown("#### Dernier résultat JSON proposé par l'IA")
                             st.json(st.session_state[grading_llm_response_key])
 
             updated_grades: list[int] = []
-            updated_questions: list[dict[str, object]] = []
+            updated_questions: list[GradedQuestion] = []
             with st.container(height=720):
                 for question in bareme_questions:
                     question_index = get_question_index(question)
@@ -1313,7 +1371,7 @@ def render_submissions_mode(tp_name: str) -> None:
         if selected_student_dir is None:
             st.info("Aucun rendu étudiant disponible pour ce TP.")
         else:
-            tabs = st.tabs(["Code source", "Compte-rendu PDF", "Compte-rendu brut", "Fichiers rendus"])
+            tabs = st.tabs(["Code source", "Rapport PDF", "Compte-rendu (Markdown)", "(Fichiers rendus)"])
 
             with tabs[0]:
                 if code_path is None:
@@ -1443,7 +1501,7 @@ def render_classroom_mode(tp_name: str) -> None:
 
 def render_individual_progress_mode() -> None:
     """Render an annual progress dashboard for one selected student across all practical sessions."""
-    student_names = discover_all_student_names()
+    student_names: list[str] = discover_all_student_names()
 
     st.title("Progression annuelle individuelle")
     st.caption(
@@ -1553,27 +1611,27 @@ def render_individual_progress_mode() -> None:
         st.bar_chart(reference_rows, x="TP", y=["Note /20", "Moyenne personnelle"], stack=False)
         st.caption("Chaque TP est comparé à la moyenne annuelle de l'étudiant pour repérer rapidement les hausses et les baisses.")
 
-    st.subheader("Rythme de réussite")
-    success_chart = (
-        alt.Chart(alt.Data(values=timeline_rows))
-        .mark_area(opacity=0.55)
-        .encode(
-            x=alt.X("TP:N", sort=None, title="TP"),
-            y=alt.Y("Taux de réussite:Q", scale=alt.Scale(domain=[0, 1]), title="Taux de réussite"),
-            color=alt.Color(
-                "Taux de réussite:Q",
-                scale=alt.Scale(domain=[0, 1], range=["#ef9a9a", "#1e88e5"]),
-                legend=None,
-            ),
-            tooltip=[
-                alt.Tooltip("Étudiant:N", title="Étudiant"),
-                alt.Tooltip("TP:N", title="TP"),
-                alt.Tooltip("Taux de réussite:Q", title="Taux", format=".1%"),
-            ],
-        )
-        .properties(height=220, title=f"Taux de réussite de {selected_student_name}")
-    )
-    st.altair_chart(success_chart, width="stretch")
+    # st.subheader("Rythme de réussite")
+    # success_chart = (
+    #     alt.Chart(alt.Data(values=timeline_rows))
+    #     .mark_area(opacity=0.55)
+    #     .encode(
+    #         x=alt.X("TP:N", sort=None, title="TP"),
+    #         y=alt.Y("Taux de réussite:Q", scale=alt.Scale(domain=[0, 1]), title="Taux de réussite"),
+    #         color=alt.Color(
+    #             "Taux de réussite:Q",
+    #             scale=alt.Scale(domain=[0, 1], range=["#ef9a9a", "#1e88e5"]),
+    #             legend=None,
+    #         ),
+    #         tooltip=[
+    #             alt.Tooltip("Étudiant:N", title="Étudiant"),
+    #             alt.Tooltip("TP:N", title="TP"),
+    #             alt.Tooltip("Taux de réussite:Q", title="Taux", format=".1%"),
+    #         ],
+    #     )
+    #     .properties(height=220, title=f"Taux de réussite de {selected_student_name}")
+    # )
+    # st.altair_chart(success_chart, width="stretch")
 
     st.subheader("Historique détaillé")
     st.dataframe(evaluated_rows, width="stretch", hide_index=True)
@@ -1629,7 +1687,8 @@ def main() -> None:
         puis l'analyse du code et du compte-rendu d'un étudiant pour l'évaluer semi-automatiquement par LLM/IA,
         ainsi que l'amélioration de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
 
-        Des idées ? [Ouvrez un ticket !](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new)
+        ### Suggestions ?
+        Vous avez des idées ? Alors s'il-vous-plaît, [ouvrez un ticket](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new) !
         """
     )
 
@@ -1637,7 +1696,7 @@ def main() -> None:
     st.markdown(
         """
         ### À propos
-        Dashboard développé par [Lilian BESSON](https://github.com/Naereen/) pour les TP de MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [License MIT](https://lbesson.mit-license.org/).
+        Dashboard développé par [Lilian BESSON](https://github.com/Naereen/) pour les TP de MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [License MIT](https://lbesson.mit-license.org/), en avril 2026.
         """
     )
 

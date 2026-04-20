@@ -32,7 +32,7 @@ if not api_key:
     api_key = st.secrets["GOOGLE_API_KEY"]
 
 
-help_credits_llm = "Avec une requête *payante* à l'IA Google Gemini, via Google AI Studio. Cf. https://aistudio.google.com/ si vous souhaitez configurer votre propre accès ou monitorer le coût de vos requêtes précédentes"
+help_credits_llm = "Avec une requête *payante* à l'IA Google Gemini, via Google AI Studio. Cf. https://aistudio.google.com/ si vous souhaitez configurer votre propre accès ou monitorer le coût de vos requêtes précédentes."
 
 gemini_client = genai.Client(api_key=api_key)
 
