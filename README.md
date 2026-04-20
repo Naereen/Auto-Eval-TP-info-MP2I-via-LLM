@@ -13,6 +13,20 @@ Ce dépôt contient un dashboard Streamlit destiné à aider un enseignant à :
 - sauvegarder les évaluations ;
 - visualiser des statistiques à l'échelle d'un TP ou d'un étudiant.
 
+## Quel genre de sujets de TP et de rendus par étudiants ?
+
+J'ai intégré un seul exemple d'un de mes petits sujets de TP, et de trois (faux) rendus d'étudiants, dans ces dossiers :
+
+- [sujets-de-travaux-pratiques/03-types-polymorphes-etc-ocaml/](sujets-de-travaux-pratiques/03-types-polymorphes-etc-ocaml/) : [TP3.md](sujets-de-travaux-pratiques/03-types-polymorphes-etc-ocaml/TP3.md), [TP3.pdf](sujets-de-travaux-pratiques/03-types-polymorphes-etc-ocaml/TP3.pdf), et son [bareme.json](sujets-de-travaux-pratiques/03-types-polymorphes-etc-ocaml/bareme.json) qui a été généré automatiquement par Google Gemini (et un prompt bien choisi) ;
+
+- [rendus-des-etudiants/03-types-polymorphes-etc-ocaml/](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/) qui contient des rendus synthétiques de trois faux étudiants : un étudiant excellent qui produit quasiment un corrigé, un étudiant plutôt moyen et un étudiant au niveau très bas :
+
+  1. [Étudiant excellent](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) 
+  2. [Étudiant moyen](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/notes.json) 
+  3. [Étudiant plutôt faible](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/notes.json) 
+
+--------
+
 ## Fonctionnalités actuellement disponibles
 
 ### Navigation générale
@@ -33,6 +47,9 @@ Le mode Documentation permet de :
 - préciser où sont sauvegardés `bareme.json` et `notes.json` ;
 - résumer la place des fonctionnalités d'assistance par IA dans le flux de travail.
 
+![documentation-screenshotsdocumentation-mode-0-documentation-intégrée-1.png](documentation-screenshotsdocumentation-mode-0-documentation-intégrée-1.png)
+![documentation-screenshotsdocumentation-mode-0-documentation-intégrée-2.png](documentation-screenshotsdocumentation-mode-0-documentation-intégrée-2.png)
+
 ### Mode `1 - Barème`
 
 Le mode Barème permet de :
@@ -46,6 +63,9 @@ Le mode Barème permet de :
 - injecter directement le JSON renvoyé dans l'éditeur courant ;
 - sauvegarder le résultat dans `sujets-de-travaux-pratiques/<tp>/bareme.json` ;
 - conserver le sujet PDF visible pendant l'édition grâce à une zone défilable dédiée au barème.
+
+![documentation-mode-1-conception-barème-assisté-par-IA-1.png](documentation-mode-1-conception-barème-assisté-par-IA-1.png)
+![documentation-mode-1-conception-barème-assisté-par-IA-3.png](documentation-mode-1-conception-barème-assisté-par-IA-3.png)
 
 ### Mode `2 - Évaluation des rendus`
 
@@ -61,6 +81,9 @@ Le mode Évaluation des rendus permet de :
 - sauvegarder la notation dans `rendus-des-etudiants/<tp>/<rendu>/notes.json` ;
 - recharger automatiquement cette notation lors d'une réouverture du rendu.
 
+![documentation-mode-2-évaluation-rendus-par-étudiant-1.png](documentation-mode-2-évaluation-rendus-par-étudiant-1.png)
+![documentation-mode-2-évaluation-rendus-par-étudiant-2.png](documentation-mode-2-évaluation-rendus-par-étudiant-2.png)
+
 ### Mode `3 - Vue de la classe par TP`
 
 Le mode Vue de la classe par TP permet de :
@@ -70,6 +93,8 @@ Le mode Vue de la classe par TP permet de :
 - calculer la moyenne, la médiane, le minimum, le maximum et l'écart-type des notes ;
 - détailler les statistiques question par question ;
 - visualiser la répartition des notes et la dispersion des résultats avec des graphiques intégrés.
+
+![documentation-mode-3-vue-classe-par-TP-1.png](documentation-mode-3-vue-classe-par-TP-1.png)
 
 ### Mode `4 - Progression annuelle individuelle`
 
@@ -81,10 +106,71 @@ Le mode Progression annuelle individuelle permet de :
 - calculer une pente de tendance par régression linéaire simple ;
 - visualiser l'évolution de ses notes et de son taux de réussite au fil de l'année.
 
+![documentation-mode-4-progression-individuelle-annuelle-1.png](documentation-mode-4-progression-individuelle-annuelle-1.png)
+
+------
+
 ## Fichiers persistés par le dashboard
 
-- `sujets-de-travaux-pratiques/<tp>/bareme.json` : barème normalisé du TP ;
-- `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant.
+- `sujets-de-travaux-pratiques/<tp>/bareme.json` : barème normalisé du TP. Cf. [cet exemple si besoin](sujets-de-travaux-pratiques/03-types-polymorphes-etc-ocaml/bareme.json) (généré par IA via Google Gemini !) ;
+
+
+```json
+{
+  "format_version": 1,
+  "tp_name": "03-types-polymorphes-etc-ocaml",
+  "question_count": 29,
+  "total_points": 100,
+  "questions": [
+    {
+      "index": 1,
+      "label": "Question 1.1",
+      "points": 1
+    },
+    {
+      "index": 11,
+      "label": "Question 2.1",
+      "points": 1
+    },
+    ...
+    {
+      "index": 29,
+      "label": "Question 4.7",
+      "points": 10
+    }
+  ]
+}
+
+```
+
+- `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini !) ;
+
+```json
+{
+  "format_version": 1,
+  "tp_name": "03-types-polymorphes-etc-ocaml",
+  "student_name": "ETUDIANT1_Etudiant1",
+  "question_count": 29,
+  "total_points_awarded": 92,
+  "total_points_bareme": 100,
+  "note_sur_20": 18.4,
+  "questions": [
+    {
+      "index": 1,
+      "label": "Question 1.1",
+      "max_points": 1,
+      "points_awarded": 1
+    },
+    ...
+    {
+      "index": 29,
+      "label": "Question 4.7",
+      "max_points": 10,
+      "points_awarded": 8
+    }
+  ]
+}
+```
 
 ## Documentation du projet
 
@@ -96,19 +182,22 @@ Le mode Progression annuelle individuelle permet de :
 
 ## Lancement local
 
-Depuis la racine du dépôt :
+Depuis la racine du dépôt, il devrait suffire de faire :
 
 ```bash
+python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-streamlit run streamlit_app.py
+streamlit run streamlit_app.py --server.port 8765
 ```
 
-Le dashboard découvre automatiquement les dossiers de TP et les rendus disponibles.
+Le dashboard s'ouvre tout seul, sur l'adresse http://localhost:8765/, puis découvre automatiquement les dossiers de TP et les rendus disponibles.
+
+------
 
 ## Feuille de route et vérifications restantes
 
-La liste des développements, tests et points de fiabilisation encore ouverts se trouve dans [TODO.md](./TODO.md).
+La liste des développements, tests et points de fiabilisation encore ouverts se trouve dans [`TODO.md`](./TODO.md).
 
 ----
 

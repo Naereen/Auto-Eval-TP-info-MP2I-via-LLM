@@ -1,0 +1,185 @@
+{
+  "format_version": 1,
+  "tp_name": "03-types-polymorphes-etc-ocaml",
+  "student_name": "ETUDIANT3_Etudiant3",
+  "question_count": 29,
+  "total_points_awarded": 12,
+  "total_points_bareme": 100,
+  "note_sur_20": 2.4,
+  "questions": [
+    {
+      "index": 1,
+      "label": "Ex.1.1: Définition du type entier_etendu",
+      "max_points": 1,
+      "points_awarded": 0
+    },
+    {
+      "index": 2,
+      "label": "Ex.1.2: Définition de age et annee",
+      "max_points": 1,
+      "points_awarded": 0
+    },
+    {
+      "index": 3,
+      "label": "Ex.1.3: Analyse de l'addition directe (annee + age)",
+      "max_points": 2,
+      "points_awarded": 2
+    },
+    {
+      "index": 4,
+      "label": "Ex.1.4: Définition de pos_inf et neg_inf",
+      "max_points": 1,
+      "points_awarded": 0
+    },
+    {
+      "index": 5,
+      "label": "Ex.1.5: Analyse de l'addition avec infinis",
+      "max_points": 2,
+      "points_awarded": 1
+    },
+    {
+      "index": 6,
+      "label": "Ex.1.6: Fonction ajoute_etendu (filtrage 9 cas)",
+      "max_points": 6,
+      "points_awarded": 1
+    },
+    {
+      "index": 7,
+      "label": "Ex.1.7: Vérification de ajoute_etendu",
+      "max_points": 1,
+      "points_awarded": 0
+    },
+    {
+      "index": 8,
+      "label": "Ex.1.8: Vérification des cas aux limites de l'addition",
+      "max_points": 2,
+      "points_awarded": 0
+    },
+    {
+      "index": 9,
+      "label": "Ex.1.9: Fonction produit_etendu (règles des signes)",
+      "max_points": 7,
+      "points_awarded": 0
+    },
+    {
+      "index": 10,
+      "label": "Ex.1.10: Vérification via assertions",
+      "max_points": 2,
+      "points_awarded": 0
+    },
+    {
+      "index": 11,
+      "label": "Ex.2.1: Définition du type couleur",
+      "max_points": 1,
+      "points_awarded": 0
+    },
+    {
+      "index": 12,
+      "label": "Ex.2.2: Définition du type alias carte",
+      "max_points": 1,
+      "points_awarded": 0
+    },
+    {
+      "index": 13,
+      "label": "Ex.2.3: Instanciation des exemples de cartes",
+      "max_points": 1,
+      "points_awarded": 0
+    },
+    {
+      "index": 14,
+      "label": "Ex.2.4: Fonction affiche_carte",
+      "max_points": 4,
+      "points_awarded": 0
+    },
+    {
+      "index": 15,
+      "label": "Ex.2.5: Amélioration affiche_carte_mieux",
+      "max_points": 5,
+      "points_awarded": 0
+    },
+    {
+      "index": 16,
+      "label": "Ex.2.6: Fonction valeur_point (barème de jeu)",
+      "max_points": 5,
+      "points_awarded": 0
+    },
+    {
+      "index": 17,
+      "label": "Ex.3.1: Exemples de sous-ensembles du plan",
+      "max_points": 2,
+      "points_awarded": 0
+    },
+    {
+      "index": 18,
+      "label": "Ex.3.2: Fonction inter2D (intersection géométrique)",
+      "max_points": 8,
+      "points_awarded": 0
+    },
+    {
+      "index": 19,
+      "label": "Ex.3.3: Tests de inter2D",
+      "max_points": 2,
+      "points_awarded": 0
+    },
+    {
+      "index": 20,
+      "label": "Ex.3.4: Fonction appartient (appartenance d'un point)",
+      "max_points": 7,
+      "points_awarded": 0
+    },
+    {
+      "index": 21,
+      "label": "Ex.3.5: Conception vers la 3D (modifications type)",
+      "max_points": 4,
+      "points_awarded": 0
+    },
+    {
+      "index": 22,
+      "label": "Ex.3.6: Théorie de l'intersection en 3D",
+      "max_points": 5,
+      "points_awarded": 0
+    },
+    {
+      "index": 23,
+      "label": "Ex.4.1: Définition du type récursif entier_unaire",
+      "max_points": 1,
+      "points_awarded": 1
+    },
+    {
+      "index": 24,
+      "label": "Ex.4.2: Définition des constantes unaire (0, 1, 2, 3)",
+      "max_points": 2,
+      "points_awarded": 2
+    },
+    {
+      "index": 25,
+      "label": "Ex.4.3: Conversion unaire vers int (récursif)",
+      "max_points": 4,
+      "points_awarded": 2
+    },
+    {
+      "index": 26,
+      "label": "Ex.4.4: Conversion int vers unaire (récursif)",
+      "max_points": 5,
+      "points_awarded": 1
+    },
+    {
+      "index": 27,
+      "label": "Ex.4.5: Vérification de réciprocité (boucle for)",
+      "max_points": 4,
+      "points_awarded": 2
+    },
+    {
+      "index": 28,
+      "label": "Ex.4.6: Fonction somme_unaire (sans passage par int)",
+      "max_points": 6,
+      "points_awarded": 0
+    },
+    {
+      "index": 29,
+      "label": "Ex.4.7: Fonction produit_unaire (récursivité imbriquée)",
+      "max_points": 8,
+      "points_awarded": 0
+    }
+  ]
+}

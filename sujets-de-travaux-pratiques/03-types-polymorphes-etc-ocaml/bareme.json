@@ -1,0 +1,153 @@
+{
+  "format_version": 1,
+  "tp_name": "03-types-polymorphes-etc-ocaml",
+  "question_count": 29,
+  "total_points": 100,
+  "questions": [
+    {
+      "index": 1,
+      "label": "Question 1.1",
+      "points": 1
+    },
+    {
+      "index": 2,
+      "label": "Question 1.2",
+      "points": 1
+    },
+    {
+      "index": 3,
+      "label": "Question 1.3",
+      "points": 1
+    },
+    {
+      "index": 4,
+      "label": "Question 1.4",
+      "points": 1
+    },
+    {
+      "index": 5,
+      "label": "Question 1.5",
+      "points": 1
+    },
+    {
+      "index": 6,
+      "label": "Question 1.6",
+      "points": 6
+    },
+    {
+      "index": 7,
+      "label": "Question 1.7",
+      "points": 1
+    },
+    {
+      "index": 8,
+      "label": "Question 1.8",
+      "points": 1
+    },
+    {
+      "index": 9,
+      "label": "Question 1.9",
+      "points": 8
+    },
+    {
+      "index": 10,
+      "label": "Question 1.10",
+      "points": 1
+    },
+    {
+      "index": 11,
+      "label": "Question 2.1",
+      "points": 1
+    },
+    {
+      "index": 12,
+      "label": "Question 2.2",
+      "points": 2
+    },
+    {
+      "index": 13,
+      "label": "Question 2.3",
+      "points": 2
+    },
+    {
+      "index": 14,
+      "label": "Question 2.4",
+      "points": 4
+    },
+    {
+      "index": 15,
+      "label": "Question 2.5",
+      "points": 5
+    },
+    {
+      "index": 16,
+      "label": "Question 2.6",
+      "points": 5
+    },
+    {
+      "index": 17,
+      "label": "Question 3.1",
+      "points": 2
+    },
+    {
+      "index": 18,
+      "label": "Question 3.2",
+      "points": 8
+    },
+    {
+      "index": 19,
+      "label": "Question 3.3",
+      "points": 1
+    },
+    {
+      "index": 20,
+      "label": "Question 3.4",
+      "points": 7
+    },
+    {
+      "index": 21,
+      "label": "Question 3.5",
+      "points": 3
+    },
+    {
+      "index": 22,
+      "label": "Question 3.6",
+      "points": 5
+    },
+    {
+      "index": 23,
+      "label": "Question 4.1",
+      "points": 1
+    },
+    {
+      "index": 24,
+      "label": "Question 4.2",
+      "points": 2
+    },
+    {
+      "index": 25,
+      "label": "Question 4.3",
+      "points": 5
+    },
+    {
+      "index": 26,
+      "label": "Question 4.4",
+      "points": 6
+    },
+    {
+      "index": 27,
+      "label": "Question 4.5",
+      "points": 2
+    },
+    {
+      "index": 28,
+      "label": "Question 4.6",
+      "points": 7
+    },
+    {
+      "index": 29,
+      "label": "Question 4.7",
+      "points": 10
+    }
+  ]
+}
