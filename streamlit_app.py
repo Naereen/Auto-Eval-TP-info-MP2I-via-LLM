@@ -533,7 +533,6 @@ def save_generated_ocaml_tests(tp_name: str, source_code: str) -> Path:
             continue
         template_path = scaffold_dir / filename
         if template_path.exists():
-            st.warning(f"shutil.copy2({template_path}, {target_path})")
             shutil.copy2(template_path, target_path)
 
     test_path = get_ocaml_test_source_path(tp_name)
@@ -971,6 +970,15 @@ def get_c_compiled_exe_path(tp_name: str, student_name: str) -> Path:
     return Path("/tmp") / f"test_c__{slugify_for_filename(tp_name)}__{slugify_for_filename(student_name)}.exe"
 
 
+def copy_c_submission_files_to_tests_dir(code_paths: Sequence[Path], tests_dir: Path) -> None:
+    """Copy the selected C submission files into the shared Criterion test directory."""
+    for code_path in code_paths:
+        target_path = tests_dir / code_path.name
+        if code_path.resolve() == target_path.resolve():
+            continue
+        shutil.copy2(code_path, target_path)
+
+
 def compile_ocaml_submission(
     student_dir: Path, code_path: Path, compiled_exe_path: Path
 ) -> tuple[int, Path, Path, str]:
@@ -992,21 +1000,19 @@ def compile_c_submission(
 
     tests_dir = get_c_tests_dir(tp_name)
     tests_dir.mkdir(parents=True, exist_ok=True)
-
-    for code_path in code_paths:
-        criterion_code_path = tests_dir / code_path
-        st.warning(f"shutil.copy2({code_path}, {criterion_code_path})")
-        shutil.copy2(code_path, criterion_code_path)
+    copy_c_submission_files_to_tests_dir(code_paths, tests_dir)
 
     command = [
-        "make",
-        "all"
+        "make", "-B",
+        "main.exe"
+        # "all"
     ]
     exit_code, output = run_command_and_capture_output(
         command,
         cwd=tests_dir,
         log_path=log_path,
     )
+    shutil.copy2(tests_dir / "main.exe", compiled_exe_path)
     return exit_code, compiled_exe_path, log_path, output
 
 
@@ -1042,7 +1048,15 @@ def run_c_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -> tu
     log_path = get_c_exec_log_path(student_dir)
     nsjail_config = ROOT_DIR / "nsjail_config.cfg"
     exit_code, output = run_command_and_capture_output(
-        ["nsjail", "--config", str(nsjail_config), "--", str(compiled_exe_path)],
+        [
+            "nsjail",
+            "--config", str(nsjail_config),
+            "--",
+            str(compiled_exe_path),
+            # "make",
+            # "-B",
+            # "run",
+        ],
         cwd=student_dir,
         log_path=log_path,
     )
@@ -1125,7 +1139,6 @@ def run_ocaml_dune_tests(
     tests_dir.mkdir(parents=True, exist_ok=True)
 
     dune_code_path = tests_dir / "code_rendu.ml"
-    st.warning(f"shutil.copy2({code_path}, {dune_code_path})")
     shutil.copy2(code_path, dune_code_path)
 
     log_path = get_ocaml_test_log_path(tp_name)
@@ -1170,16 +1183,12 @@ def run_c_criterion_tests(
     tests_dir = get_c_tests_dir(tp_name)
     tests_dir.mkdir(parents=True, exist_ok=True)
     ensure_c_tests_makefile(tp_name)
-
-    for code_path in code_paths:
-        criterion_code_path = tests_dir / code_path
-        st.warning(f"shutil.copy2({code_path}, {criterion_code_path})")
-        shutil.copy2(code_path, criterion_code_path)
+    copy_c_submission_files_to_tests_dir(code_paths, tests_dir)
 
     plain_log_path = get_c_test_log_path(tp_name)
     artifact_path = get_c_test_json_path(tp_name) if json_mode else get_c_test_html_path(tp_name)
     command = [
-        "make",
+        "make", "-B",
         "run_tests_criterion_json" if json_mode else "run_tests_criterion_nojson"
     ]
 
