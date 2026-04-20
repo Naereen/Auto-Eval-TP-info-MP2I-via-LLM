@@ -123,7 +123,7 @@ class NumericSummary(TypedDict):
 # Repository discovery and file loading helpers.
 
 
-@st.cache_data(show_spinner=False)
+# @st.cache_data(show_spinner=False)
 def get_current_git_commit() -> tuple[str | None, str | None, str | None]:
     """Return the full, short git hashes and the date, for the current repository when available."""
     try:
@@ -731,6 +731,37 @@ def compute_ocaml_tests_note_sur_20(successes: object, failures: object) -> floa
         return 0.0
 
     return round(20 * float(successes) / total_tests, 2)
+
+
+def get_ocaml_tests_note_key(tp_name: str, student_name: str | None) -> str:
+    """Return the session key used to store the automatic OCaml test grade for one student."""
+    return f"ocaml_tests_note::{tp_name}::{student_name or ''}"
+
+
+def get_ocaml_tests_note_sur_20(tp_name: str, student_name: str | None) -> float | None:
+    """Return the cached automatic OCaml test grade for one student when available."""
+    raw_note = st.session_state.get(get_ocaml_tests_note_key(tp_name, student_name))
+    return float(raw_note) if isinstance(raw_note, (int, float)) else None
+
+
+def set_ocaml_tests_note_sur_20(tp_name: str, student_name: str | None, note_sur_20: float | None) -> float | None:
+    """Store or clear the automatic OCaml test grade for one student in session state."""
+    note_key = get_ocaml_tests_note_key(tp_name, student_name)
+    if note_sur_20 is None:
+        st.session_state.pop(note_key, None)
+        return None
+
+    normalized_note = float(note_sur_20)
+    st.session_state[note_key] = normalized_note
+    return normalized_note
+
+
+def render_ocaml_tests_note_metric(metric_container, note_sur_20: float | None) -> None:
+    """Render the automatic OCaml test grade metric consistently across the dashboard."""
+    metric_container.metric(
+        "**Note aux tests automatiques**",
+        f"{note_sur_20}/20" if note_sur_20 is not None else "—",
+    )
 
 
 def run_ocaml_dune_tests(
@@ -1761,11 +1792,7 @@ def render_submissions_mode(tp_name: str) -> None:
     total_points, total_points_bareme, note_sur_20 = get_current_grading_summary(
         tp_name, selected_student_name, bareme_questions
     )
-    ocaml_tests_note_key = f"ocaml_tests_note::{tp_name}::{selected_student_name or ''}"
-    raw_ocaml_tests_note = st.session_state.get(ocaml_tests_note_key)
-    ocaml_tests_note_sur_20 = (
-        float(raw_ocaml_tests_note) if isinstance(raw_ocaml_tests_note, (int, float)) else None
-    )
+    ocaml_tests_note_sur_20 = get_ocaml_tests_note_sur_20(tp_name, selected_student_name)
 
     st.title(f"Évaluation des rendus de TP - `{tp_name}`")
     st.caption(
@@ -1776,10 +1803,8 @@ def render_submissions_mode(tp_name: str) -> None:
     col_etudiant.metric("**Étudiant sélectionné**", f"**{selected_student_name}**" or "aucun")
     col_total.metric("**Points obtenus**", f"{total_points} / {total_points_bareme}")
     col_note.metric("**Note par lecture des rendus**", f"{note_sur_20}/20")
-    col_tests_note.metric(
-        "**Note aux tests automatiques**",
-        f"{ocaml_tests_note_sur_20}/20" if ocaml_tests_note_sur_20 is not None else "—",
-    )
+    top_ocaml_tests_note_metric = col_tests_note.empty()
+    render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, ocaml_tests_note_sur_20)
 
     subject_col, grading_col, student_col = st.columns((0.7, 0.3, 0.8), gap="small")
 
@@ -2082,6 +2107,8 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                 if artifact_path_json and artifact_path_json.exists():
                     json_payload = load_json_object(artifact_path_json)
                     if json_payload is None:
+                        set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
+                        render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
                         st.error(
                             f"Le fichier JSON/HTML {artifact_path_json.name} n'a pas pu être lu correctement."
                         )
@@ -2093,15 +2120,25 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                             success = json_payload_dict.get("success")
                             failures = json_payload_dict.get("failures")
                             time = json_payload_dict.get("time")
-                            ocaml_tests_note_sur_20 = compute_ocaml_tests_note_sur_20(success, failures)
-                            st.session_state[ocaml_tests_note_key] = ocaml_tests_note_sur_20
+                            ocaml_tests_note_sur_20 = set_ocaml_tests_note_sur_20(
+                                tp_name,
+                                selected_student_name,
+                                compute_ocaml_tests_note_sur_20(success, failures),
+                            )
 
-                            st.metric("**Note aux tests automatiques**", f"{ocaml_tests_note_sur_20}/20")
+                            render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, ocaml_tests_note_sur_20)
+                            render_ocaml_tests_note_metric(st, ocaml_tests_note_sur_20)
                             st.caption(
                                 f"Résumé des tests OCaml : {success} succès, {failures} échec{'s' if int(str(failures)) > 0 else ''}, temps d'exécution {time}s."
                             )
                         else:
+                            set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
+                            render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
                             st.warning("Le contenu JSON des tests n'a pas le format attendu.")
+                else:
+                    set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
+                    render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
+                    st.warning("Aucune sortie JSON exploitable n'a été produite par les tests Dune.")
                 # HTML, by default
                 # else:
                 render_html_log(
