@@ -64,8 +64,8 @@ Le mode Barème permet de :
 - sauvegarder le résultat dans `sujets-de-travaux-pratiques/<tp>/bareme.json` ;
 - conserver le sujet PDF visible pendant l'édition grâce à une zone défilable dédiée au barème.
 
-![documentation-mode-1-conception-barème-assisté-par-IA-1.png](documentation-mode-1-conception-barème-assisté-par-IA-1.png)
-![documentation-mode-1-conception-barème-assisté-par-IA-3.png](documentation-mode-1-conception-barème-assisté-par-IA-3.png)
+![documentation-mode-1-conception-barème-assisté-par-IA-1.png](./documentation-screenshots/documentation-mode-1-conception-barème-assisté-par-IA-1.png)
+![documentation-mode-1-conception-barème-assisté-par-IA-3.png](./documentation-screenshots/documentation-mode-1-conception-barème-assisté-par-IA-3.png)
 
 ### Mode `2 - Évaluation des rendus`
 
@@ -81,8 +81,8 @@ Le mode Évaluation des rendus permet de :
 - sauvegarder la notation dans `rendus-des-etudiants/<tp>/<rendu>/notes.json` ;
 - recharger automatiquement cette notation lors d'une réouverture du rendu.
 
-![documentation-mode-2-évaluation-rendus-par-étudiant-1.png](documentation-mode-2-évaluation-rendus-par-étudiant-1.png)
-![documentation-mode-2-évaluation-rendus-par-étudiant-2.png](documentation-mode-2-évaluation-rendus-par-étudiant-2.png)
+![documentation-mode-2-évaluation-rendus-par-étudiant-1.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-1.png)
+![documentation-mode-2-évaluation-rendus-par-étudiant-2.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-2.png)
 
 ### Mode `3 - Vue de la classe par TP`
 
@@ -94,7 +94,7 @@ Le mode Vue de la classe par TP permet de :
 - détailler les statistiques question par question ;
 - visualiser la répartition des notes et la dispersion des résultats avec des graphiques intégrés.
 
-![documentation-mode-3-vue-classe-par-TP-1.png](documentation-mode-3-vue-classe-par-TP-1.png)
+![documentation-mode-3-vue-classe-par-TP-1.png](./documentation-screenshots/documentation-mode-3-vue-classe-par-TP-1.png)
 
 ### Mode `4 - Progression annuelle individuelle`
 
@@ -106,13 +106,13 @@ Le mode Progression annuelle individuelle permet de :
 - calculer une pente de tendance par régression linéaire simple ;
 - visualiser l'évolution de ses notes et de son taux de réussite au fil de l'année.
 
-![documentation-mode-4-progression-individuelle-annuelle-1.png](documentation-mode-4-progression-individuelle-annuelle-1.png)
+![documentation-mode-4-progression-individuelle-annuelle-1.png](./documentation-screenshots/documentation-mode-4-progression-individuelle-annuelle-1.png)
 
 ------
 
 ## Fichiers persistés par le dashboard
 
-- `sujets-de-travaux-pratiques/<tp>/bareme.json` : barème normalisé du TP. Cf. [cet exemple si besoin](sujets-de-travaux-pratiques/03-types-polymorphes-etc-ocaml/bareme.json) (généré par IA via Google Gemini !) ;
+- `sujets-de-travaux-pratiques/<tp>/bareme.json` : barème normalisé du TP. Cf. [cet exemple si besoin](sujets-de-travaux-pratiques/03-types-polymorphes-etc-ocaml/bareme.json) (généré par IA via Google Gemini, depuis le dashboard, automatiquement !) ;
 
 
 ```json
@@ -143,7 +143,7 @@ Le mode Progression annuelle individuelle permet de :
 
 ```
 
-- `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini !) ;
+- `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini, depuis le dashboard aussi !) ;
 
 ```json
 {
