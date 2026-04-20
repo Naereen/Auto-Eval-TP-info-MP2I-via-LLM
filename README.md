@@ -1,6 +1,6 @@
 # Auto Évaluation de TP d'informatique (en MP2I), via LLM
 
-> **Expérimentation** : peut-on construire rapidement un outil d'aide à l'évaluation de rendus (code + md/PDF) de TP notés, en classe de MP2I, qui évaluerait une partie du code via des appels à LLM ? Via le service [ILASS](https://www.ilaas.fr/) et des modèles open-weight tels que [gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b).
+> **Expérimentation** : peut-on construire rapidement un outil d'aide à l'évaluation de rendus (code + md/PDF) de TP notés, en classe de MP2I, qui évaluerait une partie du code via des appels à LLM ? Via le service [ILASS](https://www.ilaas.fr/) et des modèles open-weight tels que [gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b), ou via Google AI's Gemini.
 
 ## Fonctionnalités
 
@@ -9,6 +9,7 @@ Premier jet disponible : un dashboard Streamlit en Python 3 permet de
 - sélectionner un TP parmi ceux présents dans `sujets-de-travaux-pratiques` ;
 - choisir un mode de travail dans la navigation latérale ;
 - utiliser le mode `Barème` pour définir le nombre de questions, attribuer jusqu'à 100 points par question, voir le total et sauvegarder le résultat dans `sujets-de-travaux-pratiques/<tp>/bareme.json` ;
+- renommer manuellement chaque question du barème pour faire apparaître un libellé métier ou la numérotation exacte du sujet ;
 - profiter de valeurs par défaut adaptées aux TP courants, avec 10 questions initiales et 5 points par question ;
 - appliquer rapidement une même valeur à toutes les questions du barème à l'aide d'un bouton dédié et d'un unique champ numérique ;
 - proposer un barème automatique par IA à partir du sujet, puis injecter directement le JSON renvoyé dans l'éditeur courant avant une éventuelle sauvegarde manuelle ;

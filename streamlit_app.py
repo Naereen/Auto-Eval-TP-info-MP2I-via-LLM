@@ -245,6 +245,11 @@ def get_bareme_points_widget_key(tp_name: str, question_index: int) -> str:
     return f"bareme_points::{tp_name}::{question_index}"
 
 
+def get_bareme_label_widget_key(tp_name: str, question_index: int) -> str:
+    """Return the widget key used by the label editor for one question."""
+    return f"bareme_label::{tp_name}::{question_index}"
+
+
 def get_bareme_llm_response_key(tp_name: str) -> str:
     """Return the session key used to store the last AI-generated marking scheme response."""
     return f"bareme_llm_response::{tp_name}"
@@ -254,6 +259,7 @@ def sync_bareme_widgets(tp_name: str, bareme_data: dict[str, object]) -> None:
     """Copy one marking scheme into the Streamlit widget state for the current TP."""
     for question in get_bareme_questions(bareme_data):
         question_index = get_question_index(question)
+        st.session_state[get_bareme_label_widget_key(tp_name, question_index)] = get_question_label(question)
         st.session_state[get_bareme_points_widget_key(tp_name, question_index)] = get_question_points(question)
 
 
@@ -978,18 +984,37 @@ def render_bareme_mode(tp_name: str) -> None:
             st.caption("Édition du barème par question")
             for question in questions:
                 question_index = get_question_index(question)
-                label = get_question_label(question)
-                points = int(
-                    st.number_input(
-                        f"{question_index} - **{label}**",
-                        min_value=0,
-                        max_value=100,
-                        value=get_question_points(question),
-                        step=1,
-                        key=get_bareme_points_widget_key(tp_name, question_index),
+                default_label = get_question_label(question)
+                label_widget_key = get_bareme_label_widget_key(tp_name, question_index)
+                if label_widget_key not in st.session_state:
+                    st.session_state[label_widget_key] = default_label
+
+                label_col, points_col = st.columns((2.4, 1), gap="small")
+                with label_col:
+                    edited_label = st.text_input(
+                        f"Libellé de la question {question_index}",
+                        value=default_label,
+                        key=label_widget_key,
+                    ).strip()
+                with points_col:
+                    points = int(
+                        st.number_input(
+                            f"Points pour la question {question_index}",
+                            min_value=0,
+                            max_value=100,
+                            value=get_question_points(question),
+                            step=1,
+                            key=get_bareme_points_widget_key(tp_name, question_index),
+                        )
                     )
+
+                updated_questions.append(
+                    {
+                        "index": question_index,
+                        "label": edited_label or f"Question {question_index}",
+                        "points": points,
+                    }
                 )
-                updated_questions.append({"index": question_index, "label": label, "points": points})
 
         bareme_data = {
             "format_version": 1,
@@ -1433,9 +1458,9 @@ def main() -> None:
     st.markdown(
         """
         ### Suite prévue
-        Les prochaines étapes incluent l'amélioration du mode barème (calcul automatique par LLM/IA depuis la lecture automatique du sujet ?),
+        Les prochaines étapes incluent l'amélioration du mode barème et de son mode automatique par LLM/IA depuis la lecture du sujet ;
         puis l'analyse du code et du compte-rendu étudiant pour l'évaluer semi-automatiquement par LLM/IA,
-        ainsi que l'ajout de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
+        ainsi que l'amélioration de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
 
         Des idées ? [Ouvrez un ticket !](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new)
         """

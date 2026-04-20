@@ -20,6 +20,7 @@
 
 - Vérifier le rechargement automatique de `bareme.json` au redémarrage du dashboard.
 - Vérifier l'ajustement du nombre de questions sans perdre les points déjà saisis.
+- Vérifier que le renommage manuel des questions est bien conservé dans l'éditeur puis dans `bareme.json`.
 - Vérifier la mise à jour globale du barème avec une valeur unique pour toutes les questions.
 - Vérifier que le bouton de proposition automatique par IA injecte bien le JSON renvoyé dans l'éditeur du barème courant.
 - Vérifier l'ergonomie de la zone défilable quand le barème contient beaucoup de questions.
