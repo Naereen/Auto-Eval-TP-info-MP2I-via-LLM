@@ -48,7 +48,9 @@ def response_from_llm(
         prompt=example_prompt,
         system_prompt=default_system_prompt,
         additionnal_messages=None,
-        chemins_pdf=None,
+        paths_pdf=None,
+        paths_json=None,
+        paths_source=None,
         model_name=default_model,
         force_json_response=False,
     ):
@@ -61,13 +63,28 @@ def response_from_llm(
         print(system_prompt)
         contents.append(system_prompt)
 
-    if chemins_pdf:
-        # force_json_response = True
-        for chemin_pdf in chemins_pdf:
+    if paths_pdf:
+        for chemin_pdf in paths_pdf:
             with open(chemin_pdf, "rb") as f:
                 pdf_data = f.read()
                 contents.append(
                     types.Part.from_bytes(data=pdf_data, mime_type="application/pdf")
+                )
+
+    if paths_json:
+        for chemin_json in paths_json:
+            with open(chemin_json, "rb", encoding="utf-8") as f:
+                json_data = f.read()
+                contents.append(
+                    types.Part.from_bytes(data=json_data, mime_type="application/json")
+                )
+
+    if paths_source:
+        for chemin_source in paths_source:
+            with open(chemin_source, "r", encoding="utf-8") as f:
+                source_data = f.read()
+                contents.append(
+                    types.Part.from_text(text=source_data)
                 )
 
     if additionnal_messages:
@@ -108,8 +125,9 @@ if __name__ == "__main__":
     response_from_llm(
         prompt=example_prompt,
         system_prompt=default_system_prompt,
-        additionnal_messages=None,
-        chemins_pdf=None,
-        model_name=default_model,
-        force_json_response=False,
+        # additionnal_messages=None,
+        # paths_pdf=None,
+        # paths_json=None,
+        # model_name=default_model,
+        # force_json_response=False,
     )

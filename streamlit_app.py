@@ -17,8 +17,8 @@ from pathlib import Path
 import altair as alt
 import streamlit as st
 
-# # Local module
-# from gemini_requests import response_from_llm
+# Local module
+from gemini_requests import response_from_llm
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -243,6 +243,66 @@ def get_bareme_session_key(tp_name: str) -> str:
 def get_bareme_points_widget_key(tp_name: str, question_index: int) -> str:
     """Return the widget key used by the point editor for one question."""
     return f"bareme_points::{tp_name}::{question_index}"
+
+
+def get_bareme_llm_response_key(tp_name: str) -> str:
+    """Return the session key used to store the last AI-generated marking scheme response."""
+    return f"bareme_llm_response::{tp_name}"
+
+
+def sync_bareme_widgets(tp_name: str, bareme_data: dict[str, object]) -> None:
+    """Copy one marking scheme into the Streamlit widget state for the current TP."""
+    for question in get_bareme_questions(bareme_data):
+        question_index = get_question_index(question)
+        st.session_state[get_bareme_points_widget_key(tp_name, question_index)] = get_question_points(question)
+
+
+def set_bareme_data(tp_name: str, bareme_data: dict[str, object], *, sync_widgets: bool = True) -> dict[str, object]:
+    """Normalize and store a TP marking scheme in session state, optionally syncing its widgets."""
+    normalized_bareme = normalize_bareme_data(tp_name, bareme_data)
+    st.session_state[get_bareme_session_key(tp_name)] = normalized_bareme
+    if sync_widgets:
+        sync_bareme_widgets(tp_name, normalized_bareme)
+    return normalized_bareme
+
+
+def parse_llm_json_object(response: object) -> dict[str, object] | None:
+    """Extract a JSON object from a raw LLM response when possible."""
+    if isinstance(response, dict):
+        return response
+
+    if isinstance(response, str):
+        payload = response.strip()
+        if payload.startswith("```"):
+            lines = payload.splitlines()
+            if lines:
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            payload = "\n".join(lines).strip()
+
+        try:
+            parsed_response = json.loads(payload)
+        except json.JSONDecodeError:
+            return None
+        return parsed_response if isinstance(parsed_response, dict) else None
+
+    return None
+
+
+def build_bareme_from_llm_response(tp_name: str, response: object) -> tuple[dict[str, object] | None, str | None]:
+    """Validate one AI response and convert it into a normalized marking scheme."""
+    parsed_response = parse_llm_json_object(response)
+    if parsed_response is None:
+        return None, "La réponse de l'IA n'est pas un objet JSON exploitable."
+
+    raw_questions = parsed_response.get("questions")
+    if not isinstance(raw_questions, list) or not raw_questions:
+        return None, "La réponse de l'IA ne contient pas de liste de questions exploitable."
+
+    candidate_bareme = dict(parsed_response)
+    candidate_bareme["tp_name"] = tp_name
+    return normalize_bareme_data(tp_name, candidate_bareme), None
 
 
 def get_grading_points_widget_key(tp_name: str, student_name: str, question_index: int) -> str:
@@ -725,9 +785,7 @@ def update_bareme_question_count(tp_name: str, question_count: int) -> dict[str,
             if index < len(existing_points):
                 question["points"] = existing_points[index]
 
-    session_key = get_bareme_session_key(tp_name)
-    st.session_state[session_key] = resized_bareme
-    return resized_bareme
+    return set_bareme_data(tp_name, resized_bareme)
 
 
 def update_all_question_points(tp_name: str, points: int) -> dict[str, object]:
@@ -749,12 +807,7 @@ def update_all_question_points(tp_name: str, points: int) -> dict[str, object]:
         "question_count": len(updated_questions),
         "questions": updated_questions,
     }
-    normalized_bareme = normalize_bareme_data(tp_name, updated_bareme)
-    st.session_state[get_bareme_session_key(tp_name)] = normalized_bareme
-    for question in get_bareme_questions(normalized_bareme):
-        question_index = get_question_index(question)
-        st.session_state[get_bareme_points_widget_key(tp_name, question_index)] = get_question_points(question)
-    return normalized_bareme
+    return set_bareme_data(tp_name, updated_bareme)
 
 
 def render_pdf(path: Path, height: int = 720) -> None:
@@ -797,12 +850,12 @@ def render_subject_panel(tp_name: str) -> None:
     st.subheader("Sujet du TP")
     if subject_pdf is not None:
         render_pdf(subject_pdf, height=820)
-        st.caption(f"PDF détecté : {subject_pdf.name}")
+        st.caption(f"PDF détecté : `{subject_pdf.name}`")
     else:
         st.warning("Aucun PDF de sujet n'a été trouvé pour ce TP.")
 
     if tex_files:
-        tex_names = ", ".join(path.name for path in tex_files)
+        tex_names = ", ".join(f"`{path.name}`" for path in tex_files)
         st.caption(f"Sources LaTeX détectées : {tex_names}")
 
 
@@ -849,6 +902,56 @@ def render_bareme_mode(tp_name: str) -> None:
         if st.button("Appliquer un même barème à toutes les questions", width='stretch'):
             st.session_state[uniform_points_state_key] = not st.session_state[uniform_points_state_key]
 
+        if st.button("✨ Proposer un barème automatique par AI ✨", width='stretch', help="Par une requête à Google Gemini via Google AI Studio, cf. https://aistudio.google.com/ si vous souhaitez configurer votre propre accès."):
+            # On construit le prompt
+            prompt = """
+            Analyse ce sujet de Travaux Pratiques  d'Informatique, je t'ai joint le sujet en PDF et ses sources LaTeX.
+            Identifie les exercices et questions.
+
+            Propose un barème avec chaque questions entre 1 et 10 points (1 point si question très facile, 10 points si question plutôt dure), en respectant la difficulté relative des notions (ex: récursivité terminale en OCaml vs manipulation de pointeurs en C).
+
+            Renvoie uniquement un JSON sous cette forme :
+
+            { "format_version": 1, "tp_name": "37-graphes-euleriens", "question_count": 15, "total_points": 100, "questions": [ { "index": 1, "label": "Question XXXVII.1.1", "points": 2 }, { "index": 2, "label": "Question XXXVII.1.2", "points": 7 }, { "index": 3, "label": "Question XXXVII.2.1", "points": 5 }, { "index": 2, "label": "Question XXXVII.2.2", "points": 10 }, ... { "index": 15, "label": "Question XXXVII.9.1", "points": 10 } ] }
+            """
+
+            system_prompt = "Tu es une IA utile et efficace, experte en informatique en français. Tu vas m'aider, moi je suis professeur d'informatique en classes préparatoires CPGE, filière MP2I, en France."
+
+            subject_pdf = find_subject_pdf(tp_name)
+            tex_files = find_subject_tex_files(tp_name)
+
+            with st.spinner("Requête à l'IA en cours..."):
+                response = response_from_llm(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    # additionnal_messages=None,
+                    paths_pdf=[subject_pdf],
+                    # paths_json=None,
+                    paths_source=
+                        tex_files
+                        # + ocaml_files  # TODO: support this!
+                        # + c_files  # TODO: support this!
+                    ,
+                    # model_name=default_model,
+                    force_json_response=True,
+                )
+            st.session_state[get_bareme_llm_response_key(tp_name)] = response
+
+            llm_bareme, error_message = build_bareme_from_llm_response(tp_name, response)
+            if llm_bareme is None:
+                st.error(error_message or "La réponse de l'IA n'a pas pu être convertie en barème.")
+            else:
+                set_bareme_data(tp_name, llm_bareme)
+                st.session_state[uniform_points_state_key] = False
+                st.success("Le barème proposé par l'IA a été injecté dans l'éditeur courant.")
+                st.rerun()
+
+        llm_response_key = get_bareme_llm_response_key(tp_name)
+        if llm_response_key in st.session_state:
+            st.subheader("Dernier résultat JSON proposé par l'IA")
+            with st.container(height=520):
+                st.json(st.session_state[llm_response_key])
+
         if st.session_state[uniform_points_state_key]:
             uniform_points = int(
                 st.number_input(
@@ -873,12 +976,12 @@ def render_bareme_mode(tp_name: str) -> None:
         questions_container = st.container(height=550, border=True)
         with questions_container:
             st.caption("Édition du barème par question")
-            for i, question in enumerate(questions):
+            for question in questions:
                 question_index = get_question_index(question)
                 label = get_question_label(question)
                 points = int(
                     st.number_input(
-                        f"**{label}**",
+                        f"{question_index} - **{label}**",
                         min_value=0,
                         max_value=100,
                         value=get_question_points(question),
@@ -895,7 +998,7 @@ def render_bareme_mode(tp_name: str) -> None:
             "total_points": sum(get_question_points(question) for question in updated_questions),
             "questions": updated_questions,
         }
-        st.session_state[get_bareme_session_key(tp_name)] = bareme_data
+        set_bareme_data(tp_name, bareme_data, sync_widgets=False)
 
         total_points = sum(get_question_points(question) for question in updated_questions)
         st.caption(f"Barème courant : {question_count} questions, {total_points} points au total.")

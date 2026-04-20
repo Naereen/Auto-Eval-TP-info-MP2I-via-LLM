@@ -4,7 +4,8 @@
 
 - TODO: Je veux pouvoir supporter des TP qui demanderaient des rendus de code source en *plusieurs fichiers*.
 
-- TODO: amélioration du mode barème : calcul automatique d'un barème question par question, par un/des appels à un LLM/IA, depuis la lecture automatique du sujet (LaTeX ou PDF) ;
+- [x] pré-remplissage du mode barème par une proposition JSON issue d'un LLM/IA, avec injection directe dans l'éditeur courant.
+- TODO: fiabiliser et affiner la génération automatique du barème par LLM/IA depuis la lecture du sujet (LaTeX ou PDF).
 
 - TODO: l'analyse du code et du compte-rendu (Markdown ou PDF) de chaque étudiant, pour l'évaluer semi-automatiquement par des appels à un LLM/IA,
 
@@ -20,6 +21,7 @@
 - Vérifier le rechargement automatique de `bareme.json` au redémarrage du dashboard.
 - Vérifier l'ajustement du nombre de questions sans perdre les points déjà saisis.
 - Vérifier la mise à jour globale du barème avec une valeur unique pour toutes les questions.
+- Vérifier que le bouton de proposition automatique par IA injecte bien le JSON renvoyé dans l'éditeur du barème courant.
 - Vérifier l'ergonomie de la zone défilable quand le barème contient beaucoup de questions.
 
 ## Tester le mode Évaluation des rendus

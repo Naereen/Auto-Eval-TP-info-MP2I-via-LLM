@@ -11,6 +11,7 @@ Premier jet disponible : un dashboard Streamlit en Python 3 permet de
 - utiliser le mode `Barème` pour définir le nombre de questions, attribuer jusqu'à 100 points par question, voir le total et sauvegarder le résultat dans `sujets-de-travaux-pratiques/<tp>/bareme.json` ;
 - profiter de valeurs par défaut adaptées aux TP courants, avec 10 questions initiales et 5 points par question ;
 - appliquer rapidement une même valeur à toutes les questions du barème à l'aide d'un bouton dédié et d'un unique champ numérique ;
+- proposer un barème automatique par IA à partir du sujet, puis injecter directement le JSON renvoyé dans l'éditeur courant avant une éventuelle sauvegarde manuelle ;
 - faire défiler la liste des questions du barème dans une zone dédiée, tout en gardant le sujet PDF visible dans la colonne de gauche ;
 - utiliser le mode `Évaluation des rendus` pour sélectionner un rendu étudiant dans `rendus-des-etudiants/<tp>/` ;
 - utiliser le barème défini dans le mode `Barème` pour saisir, question par question, les points attribués à un rendu étudiant ;
