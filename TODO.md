@@ -58,10 +58,6 @@ gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_r
 nsjail --config ./nsjail_config.cfg -- ./test_c.exe
 ```
 
-### 3) Générer ces fichiers de tests automatiquement par IA (Google Gemini), depuis mon dashboard !
-
-J'aimerais intégrer à mon outil des prompts (IA/LLM) bien conçus, des boutons et la gestion des sauvegardes des fichiers générés pour facilement générer ces fichiers de tests, automatiquement depuis les sources disponibles sur un des sujets de TP donné.
-
 ----
 
 ## À fiabiliser ou corriger (pas urgent)
@@ -84,6 +80,14 @@ Rien ?
 - [ ] Vérifier que le mode `0 - Documentation` reste accessible même si aucun TP n'est détecté.
 - [ ] Vérifier que les explications sur les modes, les fichiers attendus et les fichiers générés sont cohérentes avec le comportement réel du dashboard.
 
+## Tester le mode Génération automatisée de tests OCaml
+
+- [ ] Vérifier que le mode `2 - Génération automatisée de tests OCaml` reste accessible pour un TP OCaml même si aucun `test_code_rendu.ml` n'existe encore.
+- [ ] Vérifier que la génération IA écrit bien `dune_tests/test_code_rendu.ml` sans écraser un fichier existant.
+- [ ] Vérifier que les fichiers `dune` et `dune-project` sont créés ou conservés correctement dans `dune_tests/`.
+- [ ] Vérifier que la prévisualisation du fichier de tests généré reste lisible après sauvegarde.
+- [ ] Vérifier que le mode refuse de réécrire un banc de tests déjà préparé à la main.
+
 ## Tester le mode Barème
 
 - [ ] Vérifier le rechargement automatique de `bareme.json` au redémarrage du dashboard.
@@ -96,7 +100,7 @@ Rien ?
 ## Tester le mode Évaluation des rendus
 
 - [ ] Vérifier que chaque question reprend bien le maximum défini dans le barème du TP.
-- [ ] Vérifier qu'à l'ouverture initiale du mode `2 - Évaluation des rendus`, le premier étudiant affiché recharge immédiatement ses valeurs depuis `notes.json`.
+- [ ] Vérifier qu'à l'ouverture initiale du mode `Évaluation des rendus`, le premier étudiant affiché recharge immédiatement ses valeurs depuis `notes.json`.
 - [ ] Vérifier que le bouton de proposition automatique par IA injecte bien le JSON renvoyé dans l'éditeur de notation courant.
 - [ ] Vérifier que le total obtenu et la note sur 20 se mettent à jour après chaque saisie.
 - [ ] Vérifier que le changement d'étudiant conserve une saisie indépendante pour chaque rendu.

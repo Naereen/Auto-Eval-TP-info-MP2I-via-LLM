@@ -60,9 +60,10 @@ DEFAULT_QUESTION_POINTS: Final[int] = 5
 APP_MODES: Final[tuple[str, ...]] = (
     "0 - Documentation",
     "1 - Barème",
-    "2 - Évaluation des rendus",
-    "3 - Vue de la classe par TP",
-    "4 - Progression annuelle individuelle",
+    "2 - Génération automatisée de tests OCaml",
+    "3 - Évaluation des rendus",
+    "4 - Vue de la classe par TP",
+    "5 - Progression annuelle individuelle",
 )
 
 
@@ -412,6 +413,188 @@ def get_ocaml_test_json_path(tp_name: str) -> Path:
 def get_ocaml_test_html_path(tp_name: str) -> Path:
     """Return the path of the HTML rendering generated from the dune test log."""
     return get_ocaml_tests_dir(tp_name) / OCAML_TEST_HTML_FILENAME
+
+
+def get_ocaml_test_source_path(tp_name: str) -> Path:
+    """Return the path of the OCaml test source file for one TP."""
+    return get_ocaml_tests_dir(tp_name) / "test_code_rendu.ml"
+
+
+def get_ocaml_test_generation_llm_response_key(tp_name: str) -> str:
+    """Return the session key used to store the last AI-generated OCaml test suite response."""
+    return f"ocaml_tests_llm_response::{tp_name}"
+
+
+def ocaml_test_suite_is_present(tp_name: str) -> bool:
+    """Return whether a generated OCaml test suite already exists for one TP."""
+    return get_ocaml_test_source_path(tp_name).exists()
+
+
+def strip_llm_code_fences(response: object) -> str | None:
+    """Extract raw source code from a fenced LLM response when possible."""
+    if not isinstance(response, str):
+        return None
+
+    payload = response.strip()
+    if not payload:
+        return None
+
+    if payload.startswith("```"):
+        lines = payload.splitlines()
+        if lines:
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        payload = "\n".join(lines).strip()
+
+    return payload or None
+
+
+def save_generated_ocaml_tests(tp_name: str, source_code: str) -> Path:
+    """Persist a generated OCaml test suite and ensure the dune scaffold exists."""
+    tests_dir = get_ocaml_tests_dir(tp_name)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+
+    scaffold_dir = ROOT_DIR / "default_dune_tests"
+    for filename in ("dune", "dune-project"):
+        target_path = tests_dir / filename
+        if target_path.exists():
+            continue
+        template_path = scaffold_dir / filename
+        if template_path.exists():
+            shutil.copy2(template_path, target_path)
+
+    test_path = get_ocaml_test_source_path(tp_name)
+    test_path.write_text(source_code.rstrip() + "\n", encoding="utf-8")
+    read_text_file.clear()
+    return test_path
+
+
+def render_ocaml_tests_generation_mode(tp_name: str) -> None:
+    """Render the AI-assisted OCaml test generation workflow for one practical session."""
+    bareme_data = get_bareme_data(tp_name)
+    subject_pdf = find_subject_pdf(tp_name)
+    tex_files = find_subject_tex_files(tp_name)
+    markdown_files = find_subject_markdown_files(tp_name)
+    bareme_path = get_bareme_path(tp_name)
+    tests_dir = get_ocaml_tests_dir(tp_name)
+    test_source_path = get_ocaml_test_source_path(tp_name)
+    test_suite_exists = ocaml_test_suite_is_present(tp_name)
+
+    st.title(f"Génération automatisée de tests OCaml - `{tp_name}`")
+    st.caption(
+        "Mode de préparation du banc de tests Dune partagé, avec génération assistée par IA du fichier `test_code_rendu.ml` quand il n'existe pas encore."
+    )
+
+    subject_col, tests_col = st.columns((1.1, 1), gap="large")
+
+    with subject_col:
+        render_subject_panel(tp_name)
+
+    with tests_col:
+        st.subheader("Banc de tests OCaml")
+        st.write(
+            "Ce mode prépare le dossier `dune_tests/` du TP courant et ne réécrit le fichier de tests qu'en l'absence d'un fichier déjà présent."
+        )
+
+        st.caption(f"Dossier cible : `{tests_dir}`")
+        if test_suite_exists:
+            st.success("Un fichier `test_code_rendu.ml` existe déjà pour ce TP.")
+            st.caption(
+                "La génération automatique est donc désactivée pour éviter d'écraser un banc de tests déjà préparé à la main."
+            )
+            existing_files = []
+            if tests_dir.exists():
+                for path in sorted(tests_dir.iterdir(), key=lambda item: item.name.lower()):
+                    existing_files.append({"Fichier": path.name, "Type": "Dossier" if path.is_dir() else "Fichier"})
+            if existing_files:
+                st.dataframe(existing_files, width="stretch", hide_index=True)
+            if test_source_path.exists():
+                with st.expander("Afficher le fichier de tests existant"):
+                    st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
+            return
+
+        missing_files = [filename for filename in ("dune", "dune-project", "test_code_rendu.ml") if not (tests_dir / filename).exists()]
+        if missing_files:
+            st.info("Fichiers absents avant génération : " + ", ".join(f"`{name}`" for name in missing_files))
+
+        if not bareme_path.exists():
+            st.warning(
+                "Aucun `bareme.json` n'est encore sauvegardé pour ce TP ; la génération utilisera le barème courant en session si nécessaire."
+            )
+
+        generate_button_help = (
+            "Analyse le sujet PDF, ses sources et le barème courant pour proposer un fichier `test_code_rendu.ml` Dune/Alcotest/QCheck. "
+            f"{help_credits_llm}"
+        )
+        if st.button("✨ Générer le fichier de tests OCaml par IA ? ✨", width='stretch', help=generate_button_help):
+            prompt = f"""
+            Analyse ce sujet de Travaux Pratiques d'Informatique en MP2I.
+
+            Je veux que tu génères le fichier OCaml complet `test_code_rendu.ml` pour un banc de tests Dune.
+
+            Contraintes impératives :
+            - ne renvoie QUE le code source OCaml final, sans explication, sans Markdown, sans bloc de code ;
+            - le fichier doit être compatible avec `dune`, `alcotest`, `qcheck` et `qcheck-alcotest` ;
+            - le module principal testé s'appelle `Code_rendu` ;
+            - écris à la fois des tests unitaires Alcotest et des tests de propriétés QCheck quand c'est pertinent ;
+            - privilégie des helpers lisibles, des assertions explicites et des générateurs QCheck robustes ;
+            - si l'API exacte n'est pas entièrement déductible, construis des tests génériques utiles à partir du sujet et des exemples présents ;
+            - évite d'écraser des fichiers existants : on ne génère que `test_code_rendu.ml`.
+
+            Le résultat doit constituer un banc de tests sérieux, pédagogique et directement exploitable.
+            """
+
+            system_prompt = "Tu es une IA utile et efficace, experte en informatique en français. Tu aides un professeur d'informatique en classes préparatoires CPGE, filière MP2I, en France."
+
+            json_paths: list[Path] = []
+            if bareme_path.exists():
+                json_paths.append(bareme_path)
+
+            additional_messages: list[str] | None = None
+            if not json_paths:
+                additional_messages = [
+                    "Barème courant en mémoire de session :\n" + json.dumps(bareme_data, ensure_ascii=False, indent=2)
+                ]
+
+            source_paths: list[Path] = list(tex_files) + list(markdown_files)
+            with st.spinner("Génération du fichier de tests par l'IA en cours..."):
+                response = response_from_llm(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    additionnal_messages=additional_messages,
+                    paths_pdf=[subject_pdf] if subject_pdf is not None else None,
+                    paths_json=json_paths or None,
+                    paths_source=source_paths or None,
+                    force_json_response=False,
+                )
+
+            st.session_state[get_ocaml_test_generation_llm_response_key(tp_name)] = response
+            generated_tests = strip_llm_code_fences(response)
+            if generated_tests is None:
+                st.error("La réponse de l'IA n'a pas pu être convertie en fichier de tests OCaml exploitable.")
+            else:
+                test_path = save_generated_ocaml_tests(tp_name, generated_tests)
+                st.success(f"Le fichier de tests a été généré et sauvegardé dans `{test_path.name}`.")
+                st.rerun()
+
+        generation_llm_response_key = get_ocaml_test_generation_llm_response_key(tp_name)
+        if generation_llm_response_key in st.session_state:
+            with st.expander("Afficher la réponse brute de l'IA pour les tests OCaml"):
+                with st.container(height=520):
+                    st.write(st.session_state[generation_llm_response_key])
+
+        if test_source_path.exists():
+            with st.expander("Prévisualiser le fichier `test_code_rendu.ml` actuel"):
+                st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
+
+        if tests_dir.exists():
+            st.subheader("Contenu actuel du dossier `dune_tests/`")
+            current_files = []
+            for path in sorted(tests_dir.iterdir(), key=lambda item: item.name.lower()):
+                current_files.append({"Fichier": path.name, "Type": "Dossier" if path.is_dir() else "Fichier"})
+            if current_files:
+                st.dataframe(current_files, width="stretch", hide_index=True)
 
 
 def get_ocaml_compiled_exe_path(tp_name: str, student_name: str) -> Path:
@@ -1857,7 +2040,7 @@ def render_submissions_mode(tp_name: str) -> None:
 
                             st.metric("**Note aux tests automatiques**", f"{ocaml_tests_note_sur_20}/20")
                             st.caption(
-                                f"Résumé des tests OCaml : {success} succès, {failures} échec{'s' if failures > 0 else ''}, temps d'exécution {time}s."
+                                f"Résumé des tests OCaml : {success} succès, {failures} échec{'s' if int(str(failures)) > 0 else ''}, temps d'exécution {time}s."
                             )
                         else:
                             st.warning("Le contenu JSON des tests n'a pas le format attendu.")
@@ -2136,8 +2319,9 @@ def render_documentation_mode() -> None:
         """
         1. Choisir le mode `1 - Barème` pour préparer le barème d'un TP.
         2. Vérifier le sujet affiché à gauche, puis renseigner ou faire proposer les questions et leurs points.
-        3. Passer au mode `2 - Évaluation des rendus` pour noter un étudiant question par question.
-        4. Sauvegarder les notes, puis consulter les synthèses dans les modes `3` et `4`.
+        3. Passer au mode `2 - Génération automatisée de tests OCaml` pour préparer un banc de tests Dune/Alcotest/QCheck.
+        4. Passer au mode `3 - Évaluation des rendus` pour noter un étudiant question par question.
+        5. Sauvegarder les notes, puis consulter les synthèses dans les modes `4` et `5`.
         """
     )
 
@@ -2152,15 +2336,19 @@ def render_documentation_mode() -> None:
             "Usage": "Définir le nombre de questions, leurs libellés, leurs points et sauvegarder le `bareme.json` du TP.",
         },
         {
-            "Mode": "2 - Évaluation des rendus",
+            "Mode": "2 - Génération automatisée de tests OCaml",
+            "Usage": "Créer un banc de tests OCaml Dune/Alcotest/QCheck si aucun `test_code_rendu.ml` n'est encore présent.",
+        },
+        {
+            "Mode": "3 - Évaluation des rendus",
             "Usage": "Ouvrir un rendu étudiant, lire son code et son rapport, puis saisir ou pré-remplir la notation avant sauvegarde.",
         },
         {
-            "Mode": "3 - Vue de la classe par TP",
+            "Mode": "4 - Vue de la classe par TP",
             "Usage": "Consulter les statistiques globales d'un TP à partir des `notes.json` déjà sauvegardés.",
         },
         {
-            "Mode": "4 - Progression annuelle individuelle",
+            "Mode": "5 - Progression annuelle individuelle",
             "Usage": "Suivre un étudiant sur l'ensemble des TP déjà évalués durant l'année.",
         },
     ]
@@ -2192,8 +2380,10 @@ def render_documentation_mode() -> None:
         st.markdown(
             f"""
             - Le mode `1 - Barème` peut proposer un barème automatique à partir du sujet et de ses sources.
-            - Le mode `2 - Évaluation des rendus` peut proposer une notation automatique à partir du sujet, du barème, du code et du compte-rendu.
-            - Dans les deux cas, la proposition IA est injectée dans l'éditeur courant, puis reste modifiable avant sauvegarde.
+            - Le mode `2 - Génération automatisée de tests OCaml` peut générer automatiquement un fichier `test_code_rendu.ml` s'il n'existe pas encore, à partir du sujet et du barème courant.
+            - Le mode `3 - Évaluation des rendus` peut proposer une notation automatique à partir du sujet, du barème, du code et du compte-rendu.
+            - Les modes `1` et `3` injectent leur proposition IA dans l'éditeur courant, puis restent modifiables avant sauvegarde.
+            - Le mode `2` écrit directement un fichier `test_code_rendu.ml` dans `dune_tests/` si la génération est demandée.
             - À propos de ces requêtes AI : {help_credits_llm}
             """
         )
@@ -2249,17 +2439,16 @@ def main() -> None:
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut rédiger son barème", tp_names)
         render_bareme_mode(selected_tp)
 
-    # TODO: ajouter un mode intermédiaire entre les modes actuellement numérotés "1 - Barème" et "2 - Évaluation des rendus", qui s'occupera de générer via LLM-AI (Google Gemini Flash 3.1) un super fichier de test via Alcotest et QCheck, si aucun tel fichier de test n'est encore présent
-    # TODO: Inspire toi des morceaux qui se sont occupés de "✨ Proposer un barème automatique par IA ? ✨" et de "✨ Proposer une notaton automatique par IA ? ✨"
-    # TODO: ce mode intermédiaire pourrait s'appeler "2 - Génération automatisé de tests OCaml", et décaler les numéros des options suivantes
-
-    elif selected_mode == "2 - Évaluation des rendus":
+    elif selected_mode == "2 - Génération automatisée de tests OCaml":
+        selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut générer les tests OCaml", tp_names)
+        render_ocaml_tests_generation_mode(selected_tp)
+    elif selected_mode == "3 - Évaluation des rendus":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut évaluer les documents rendus par la classe", tp_names)
         render_submissions_mode(selected_tp)
-    elif selected_mode == "3 - Vue de la classe par TP":
+    elif selected_mode == "4 - Vue de la classe par TP":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut visualiser les performances de la classe", tp_names)
         render_classroom_mode(selected_tp)
-    elif selected_mode == "4 - Progression annuelle individuelle":
+    elif selected_mode == "5 - Progression annuelle individuelle":
         render_individual_progress_mode()
     else:
         render_placeholder_mode("TODO: TP à sélectionner", selected_mode)

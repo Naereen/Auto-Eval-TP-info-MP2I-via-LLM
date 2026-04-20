@@ -9,6 +9,7 @@ Ce dépôt contient un dashboard Streamlit destiné à aider un enseignant à :
 - parcourir les sujets de TP disponibles ;
 - consulter les rendus étudiants ;
 - construire un barème par TP ;
+- générer automatiquement un banc de tests OCaml quand aucun `test_code_rendu.ml` n'est encore présent ;
 - saisir ou pré-remplir une notation ;
 - sauvegarder les évaluations ;
 - visualiser des statistiques à l'échelle d'un TP ou d'un étudiant.
@@ -67,7 +68,18 @@ Le mode Barème permet de :
 ![documentation-mode-1-conception-barème-assisté-par-IA-1.png](./documentation-screenshots/documentation-mode-1-conception-barème-assisté-par-IA-1.png)
 ![documentation-mode-1-conception-barème-assisté-par-IA-3.png](./documentation-screenshots/documentation-mode-1-conception-barème-assisté-par-IA-3.png)
 
-### Mode `2 - Évaluation des rendus`
+### Mode `2 - Génération automatisée de tests OCaml`
+
+Le mode Génération automatisée de tests OCaml permet de :
+
+- préparer le dossier partagé `dune_tests/` du TP courant ;
+- détecter l'absence d'un fichier `test_code_rendu.ml` avant d'écrire quoi que ce soit ;
+- analyser le sujet, ses sources et le barème courant pour proposer un banc de tests OCaml ;
+- générer un fichier `test_code_rendu.ml` compatible avec `dune`, `alcotest`, `qcheck` et `qcheck-alcotest` ;
+- créer au besoin le squelette Dune minimal via `dune` et `dune-project` ;
+- conserver les fichiers déjà présents dès qu'un banc de tests a été préparé à la main.
+
+### Mode `3 - Évaluation des rendus`
 
 Le mode Évaluation des rendus permet de :
 
@@ -86,7 +98,7 @@ Pour les rendus OCaml, ce mode ajoute aussi des actions à la demande, déclench
 ![documentation-mode-2-évaluation-rendus-par-étudiant-1.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-1.png)
 ![documentation-mode-2-évaluation-rendus-par-étudiant-2.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-2.png)
 
-### Mode `3 - Vue de la classe par TP`
+### Mode `4 - Vue de la classe par TP`
 
 Le mode Vue de la classe par TP permet de :
 
@@ -98,7 +110,7 @@ Le mode Vue de la classe par TP permet de :
 
 ![documentation-mode-3-vue-classe-par-TP-1.png](./documentation-screenshots/documentation-mode-3-vue-classe-par-TP-1.png)
 
-### Mode `4 - Progression annuelle individuelle`
+### Mode `5 - Progression annuelle individuelle`
 
 Le mode Progression annuelle individuelle permet de :
 
@@ -146,6 +158,8 @@ Le mode Progression annuelle individuelle permet de :
 ```
 
 - `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini, depuis le dashboard aussi !) ;
+
+- `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.ml` : fichier de tests OCaml généré ou entretenu par le mode `2 - Génération automatisée de tests OCaml` ;
 
 - `rendus-des-etudiants/<tp>/<rendu>/ocamlopt_code_rendu.log` et `exec_code_rendu.log` : logs de compilation et d'exécution pour les rendus OCaml évalués à la demande ;
 - `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.log` et `test_code_rendu.html` : sortie brute et rendu HTML coloré des tests Dune exécutés à la demande.
@@ -212,7 +226,7 @@ cd rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1
 dune runtest
 ```
 
-Depuis le dashboard, le mode `2 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans [NsJail](https://nsjail.dev/), puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
+Depuis le dashboard, le mode `2 - Génération automatisée de tests OCaml` peut produire automatiquement un `test_code_rendu.ml` quand il manque, puis le mode `3 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans [NsJail](https://nsjail.dev/), puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
 
 ------
 
