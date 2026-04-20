@@ -40,7 +40,7 @@ LOGO_LYCEE: Final[str] = "logo.jpeg"
 OCAML_INTERPRETER_PATH: Final[Path] = Path.home() / '.opam' / '4.14.1' / 'bin' / 'ocaml'
 
 # Preferred filenames are checked first before falling back to broader glob searches.
-CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "main.c", "code_rendu.ml", "main.ml")
+CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "lib.h", "lib.c", "main.c", "code_rendu.ml", "main.ml")
 REPORT_PDF_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.pdf", "compte_rendu.pdf")
 REPORT_MD_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.md", "compte_rendu.md")
 
@@ -61,7 +61,38 @@ C_EXEC_LOG_FILENAME: Final[str] = "exec_code_rendu.log"
 C_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
 C_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
 C_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
-C_CRITERION_MAKEFILE_TEMPLATE: Final[str] = """all: test_code_rendu.exe run_tests_criterion\n\nCC = gcc\nCFLAGS = -Wall -Wextra -Wvla -fsanitize=address,undefined -g\nLDFLAGS = -lcriterion -lm\n\ntest_code_rendu.exe: code_rendu.c test_code_rendu.c\n\t$(CC) $(CFLAGS) -o test_code_rendu.exe code_rendu.c test_code_rendu.c $(LDFLAGS)\n\nrun_tests_criterion: run_tests_criterion_nojson\nrun_tests_criterion_nojson: test_code_rendu.exe\n\ttime ./test_code_rendu.exe --verbose\nrun_tests_criterion_json: test_code_rendu.exe\n\ttime ./test_code_rendu.exe --verbose --json\n"""
+
+C_TEST_SOURCE_FILENAME: Final[str] = "test_lib.c"
+C_CRITERION_MAKEFILE_TEMPLATE: Final[str] = """
+all:	main.exe run
+
+# Variables
+CC = gcc
+CFLAGS = -Wall -Wextra -Wvla -fsanitize=address,undefined -g
+LDFLAGS = -lcriterion
+
+graph.o:  graph.c
+	$(CC) $(CFLAGS) -c -o graph.o graph.c
+stack.o:  stack.c
+	$(CC) $(CFLAGS) -c -o stack.o stack.c
+lib.o:  lib.c
+	$(CC) $(CFLAGS) -c -o lib.o lib.c
+
+main.exe:  stack.o graph.o lib.o main.c
+	$(CC) $(CFLAGS) -o main.exe stack.o graph.o lib.o main.c
+
+test_lib.exe:  stack.o graph.o lib.o test_code_rendu.c
+	$(CC) $(CFLAGS) -o test_lib.exe stack.o graph.o lib.o test_lib.c $(LDFLAGS)
+
+run_tests_criterion:	run_tests_criterion_nojson
+run_tests_criterion_nojson:	test_lib.exe
+	time ./test_lib.exe --verbose
+run_tests_criterion_json:	test_lib.exe
+	time ./test_lib.exe --verbose --json
+
+run:
+    ./main.exe
+"""
 
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
@@ -270,6 +301,26 @@ def find_student_code(student_dir: Path) -> Path | None:
 
     fallback = sorted(student_dir.glob("*.c")) + sorted(student_dir.glob("*.ml"))
     return fallback[0] if fallback else None
+
+
+def pick_all_existing(directory: Path, candidates: tuple[str, ...]) -> list[Path]:
+    """Return all the candidate filenames that exist inside a directory."""
+    paths: list[Path] = []
+    for filename in candidates:
+        path = directory / filename
+        if path.exists():
+            paths.append(path)
+    return paths
+
+
+def find_student_codes(student_dir: Path) -> list[Path]:
+    """Locate the submitted source files, preferring the canonical filenames."""
+    preferred = pick_all_existing(student_dir, CODE_CANDIDATES)
+    if preferred:
+        return preferred
+
+    fallbacks = sorted(student_dir.glob("*.c")) + sorted(student_dir.glob("*.h")) + sorted(student_dir.glob("*.ml"))
+    return fallbacks if fallbacks else []
 
 
 def find_student_report_pdf(student_dir: Path) -> Path | None:
@@ -482,6 +533,7 @@ def save_generated_ocaml_tests(tp_name: str, source_code: str) -> Path:
             continue
         template_path = scaffold_dir / filename
         if template_path.exists():
+            st.warning(f"shutil.copy2({template_path}, {target_path})")
             shutil.copy2(template_path, target_path)
 
     test_path = get_ocaml_test_source_path(tp_name)
@@ -522,7 +574,7 @@ def get_c_test_html_path(tp_name: str) -> Path:
 
 def get_c_test_source_path(tp_name: str) -> Path:
     """Return the path of the Criterion test source file for one TP."""
-    return get_c_tests_dir(tp_name) / "test_code_rendu.c"
+    return get_c_tests_dir(tp_name) / C_TEST_SOURCE_FILENAME
 
 
 def get_c_test_makefile_path(tp_name: str) -> Path:
@@ -590,10 +642,10 @@ def render_c_tests_generation_mode(tp_name: str) -> None:
     subject_col, tests_col = st.columns((1.1, 1), gap="large")
 
     with subject_col:
-        render_subject_panel(tp_name, height=1540)
+        render_subject_panel(tp_name, height=1000)
 
     with tests_col:
-        st.subheader("Banc de tests C / Criterion")
+        st.subheader("Banc de tests C, avec Criterion")
         if test_suite_exists:
             st.write(
                 "Ce mode prépare le dossier `criterion_tests/` du TP courant. Un fichier de tests existe déjà ; son écrasement n'est possible qu'après déverrouillage explicite puis confirmation de génération."
@@ -756,10 +808,10 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
     subject_col, tests_col = st.columns((1.1, 1), gap="large")
 
     with subject_col:
-        render_subject_panel(tp_name, height=1540)
+        render_subject_panel(tp_name, height=1000)
 
     with tests_col:
-        st.subheader("Banc de tests OCaml")
+        st.subheader("Banc de tests OCaml, avec QCheck et Alcotest")
         if test_suite_exists:
             st.write(
                 "Ce mode prépare le dossier `dune_tests/` du TP courant. Un fichier de tests existe déjà ; son écrasement n'est possible qu'après déverrouillage explicite puis confirmation de génération."
@@ -933,16 +985,18 @@ def compile_ocaml_submission(
 
 
 def compile_c_submission(
-    student_dir: Path, code_path: Path, compiled_exe_path: Path, tp_name: str
+    student_dir: Path, code_paths: list[Path], compiled_exe_path: Path, tp_name: str
 ) -> tuple[int, Path, Path, str]:
     """Compile one C submission (consisting of a list of files), and persist the compiler output."""
     log_path = get_c_compile_log_path(student_dir)
 
-    tests_dir = get_ocaml_tests_dir(tp_name)
+    tests_dir = get_c_tests_dir(tp_name)
     tests_dir.mkdir(parents=True, exist_ok=True)
 
-    criterion_code_path = tests_dir / code_path.basename()
-    shutil.copy2(code_path, criterion_code_path)
+    for code_path in code_paths:
+        criterion_code_path = tests_dir / code_path
+        st.warning(f"shutil.copy2({code_path}, {criterion_code_path})")
+        shutil.copy2(code_path, criterion_code_path)
 
     command = [
         "make",
@@ -1032,20 +1086,20 @@ def compute_ocaml_tests_note_sur_20(successes: object, failures: object) -> floa
     return round(20 * float(successes) / total_tests, 2)
 
 
-def get_ocaml_tests_note_key(tp_name: str, student_name: str | None) -> str:
-    """Return the session key used to store the automatic OCaml test grade for one student."""
-    return f"ocaml_tests_note::{tp_name}::{student_name or ''}"
+def get_tests_note_key(tp_name: str, student_name: str | None) -> str:
+    """Return the session key used to store the automatic test grade for one student."""
+    return f"tests_note::{tp_name}::{student_name or ''}"
 
 
-def get_ocaml_tests_note_sur_20(tp_name: str, student_name: str | None) -> float | None:
-    """Return the cached automatic OCaml test grade for one student when available."""
-    raw_note = st.session_state.get(get_ocaml_tests_note_key(tp_name, student_name))
+def get_tests_note_sur_20(tp_name: str, student_name: str | None) -> float | None:
+    """Return the cached automatic test grade for one student when available."""
+    raw_note = st.session_state.get(get_tests_note_key(tp_name, student_name))
     return float(raw_note) if isinstance(raw_note, (int, float)) else None
 
 
 def set_ocaml_tests_note_sur_20(tp_name: str, student_name: str | None, note_sur_20: float | None) -> float | None:
     """Store or clear the automatic OCaml test grade for one student in session state."""
-    note_key = get_ocaml_tests_note_key(tp_name, student_name)
+    note_key = get_tests_note_key(tp_name, student_name)
     if note_sur_20 is None:
         st.session_state.pop(note_key, None)
         return None
@@ -1071,6 +1125,7 @@ def run_ocaml_dune_tests(
     tests_dir.mkdir(parents=True, exist_ok=True)
 
     dune_code_path = tests_dir / "code_rendu.ml"
+    st.warning(f"shutil.copy2({code_path}, {dune_code_path})")
     shutil.copy2(code_path, dune_code_path)
 
     log_path = get_ocaml_test_log_path(tp_name)
@@ -1109,19 +1164,24 @@ def run_ocaml_dune_tests(
 
 
 def run_c_criterion_tests(
-    tp_name: str, code_path: Path, json_mode: bool
+    tp_name: str, code_paths: list[Path], json_mode: bool
 ) -> tuple[int, Path, Path, str]:
     """Copy one C submission into the shared Criterion tests and run them."""
     tests_dir = get_c_tests_dir(tp_name)
     tests_dir.mkdir(parents=True, exist_ok=True)
     ensure_c_tests_makefile(tp_name)
 
-    criterion_code_path = tests_dir / code_path.basename()
-    shutil.copy2(code_path, criterion_code_path)
+    for code_path in code_paths:
+        criterion_code_path = tests_dir / code_path
+        st.warning(f"shutil.copy2({code_path}, {criterion_code_path})")
+        shutil.copy2(code_path, criterion_code_path)
 
     plain_log_path = get_c_test_log_path(tp_name)
     artifact_path = get_c_test_json_path(tp_name) if json_mode else get_c_test_html_path(tp_name)
-    command = ["make", "run_tests_criterion_json" if json_mode else "run_tests_criterion_nojson"]
+    command = [
+        "make",
+        "run_tests_criterion_json" if json_mode else "run_tests_criterion_nojson"
+    ]
 
     exit_code, output = run_command_and_capture_output(
         command,
@@ -2108,10 +2168,12 @@ def render_submissions_mode(tp_name: str) -> None:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
     code_path: Path | None = None
+    code_paths: list[Path] = []
     report_pdf: Path | None = None
     report_md: Path | None = None
     if selected_student_dir is not None:
         code_path = find_student_code(selected_student_dir)
+        code_paths = find_student_codes(selected_student_dir)
         report_pdf = find_student_report_pdf(selected_student_dir)
         report_md = find_student_report_markdown(selected_student_dir)
 
@@ -2122,8 +2184,8 @@ def render_submissions_mode(tp_name: str) -> None:
         tp_name, selected_student_name, bareme_questions
     )
     tests_note_sur_20 = (
-        get_ocaml_tests_note_sur_20(tp_name, selected_student_name)
-        if code_path is not None and code_path.suffix == ".ml"
+        get_tests_note_sur_20(tp_name, selected_student_name)
+        if code_path is not None and code_path.suffix in [".c", ".ml"]
         else None
     )
 
@@ -2195,6 +2257,8 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                     source_paths: list[Path] = list(tex_files) + list(markdown_files)
                     if code_path is not None:
                         source_paths.append(code_path)
+                    if code_paths:
+                        source_paths += code_paths
                     if report_md is not None:
                         source_paths.append(report_md)
 
@@ -2299,11 +2363,18 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
         if selected_student_dir is None:
             st.info("Aucun rendu étudiant disponible pour ce TP.")
         else:
-            tabs = st.tabs(["Code source", "Rapport PDF", "Compte-rendu (Markdown)", "Fichiers rendus"])
+            tabs = st.tabs(["Code(s) source", "Rapport PDF", "Compte-rendu (Markdown)", "Fichiers rendus"])
 
             with tabs[0]:
-                if code_path is None:
+                if not code_path or code_path is None:
                     st.warning("Aucun fichier source rendu n'a été trouvé.")
+                elif code_paths:
+                    code_paths_tabs = st.tabs([str(one_code_path).split('/')[-1] for one_code_path in code_paths])
+                    for one_tab, one_code_path in zip(code_paths_tabs, code_paths):
+                        with one_tab:
+                            code = read_text_file(str(one_code_path))
+                            st.code(code, language=detect_language(one_code_path), line_numbers=True, wrap_lines=True, height=700)
+                            st.caption(f"Fichier affiché : {one_code_path.name}")
                 else:
                     code = read_text_file(str(code_path))
                     st.code(code, language=detect_language(code_path), line_numbers=True, wrap_lines=True, height=720)
@@ -2330,8 +2401,14 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                     st.write(f"- {label} : `{path.name}`")
 
 
+    ocaml_detected = True
+    for one_code_path in ([code_path] if code_path else []) + code_paths:
+        if one_code_path.suffix in [".c", ".h"]:
+            ocaml_detected = False
+
+
     st.divider()
-    st.subheader("Outils d'évaluation de code (OCaml ou C) semi-automatisé")
+    st.subheader(f"Outils d'évaluation de code {'OCaml' if ocaml_detected else 'C'} semi-automatisé")
     st.caption(
         "Aucune action n'est lancée automatiquement : la compilation et l'exécution isolée dans [`NsJail`](https://nsjail.dev/), ou les batteries de test ne démarrent qu'après un clic explicite sur le bon bouton."
     )
@@ -2340,24 +2417,20 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
         st.info("Sélectionnez d'abord un rendu étudiant contenant un fichier `code_rendu.ml` ou `code_rendu.c` pour activer ces actions.")
         return
 
-    if code_path.suffix == ".c":
+    if not ocaml_detected:
         compiled_exe_path = get_c_compiled_exe_path(tp_name, selected_student_name or "")
         c_tools_tabs = st.tabs(["A - Lecture du Makefile", "B - Compiler", "C - Exécuter dans la safebox", "D - Tests complets"])
 
         with c_tools_tabs[0]:
-            st.write("Affichage du fichier Makefile qui sera utilisé pour savoir gérer la compilation du `code_rendu.c` par l'étudiant")
+            st.write("Affichage du fichier Makefile qui sera utilisé pour savoir gérer la compilation des codes rendus par l'étudiant (.c et .h)")
             makefile_path = get_c_test_makefile_path(tp_name)
             st.code(read_text_file(str(makefile_path)), language="makefile", line_numbers=True, wrap_lines=True, height=520)
 
         with c_tools_tabs[1]:
-            st.write("Compiler les fichiers C rendus, sans l'exécuter immédiatement.")
+            st.write("Compiler les fichiers C rendus, sans exécuter directement le binaire ainsi produit.")
             compile_button_key = f"c_compile_button::{tp_name}::{selected_student_name}"
             if st.button("Compiler les rendus C (avec gcc)", key=compile_button_key, type="primary", width='stretch'):
-                code_paths = [
-                    code_path,
-                    "main.c",
-                ]
-                exit_code, compiled_exe_path, log_path, output = compile_c_submission(selected_student_dir, code_paths, compiled_exe_path, tp_name)
+                exit_code, compiled_exe_path, log_path, output = compile_c_submission(selected_student_dir, code_paths if code_paths else [code_path], compiled_exe_path, tp_name)
                 if exit_code == 0:
                     st.success(f"Compilation réussie, terminée avec succès, le binaire est disponible dans {compiled_exe_path}.")
                 else:
@@ -2418,7 +2491,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                     )
                 else:
                     exit_code, log_path, artifact_path, output = run_c_criterion_tests(
-                        tp_name, code_path, json_mode=False
+                        tp_name, code_paths if code_paths else [code_path], json_mode=False
                     )
                     if exit_code == 0:
                         st.success(f"Tests Criterion terminés entièrement avec succès. Le rendu HTML a été généré dans `{artifact_path.name}`.")
@@ -2428,7 +2501,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                         )
 
                     exit_code_json, log_path_json, artifact_path_json, output_json = run_c_criterion_tests(
-                        tp_name, code_path, json_mode=True
+                        tp_name, code_paths if code_paths else [code_path], json_mode=True
                     )
 
                     st.markdown("**Sortie de cette commande Bash (log)**")

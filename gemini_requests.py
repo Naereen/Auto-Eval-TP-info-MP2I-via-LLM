@@ -7,7 +7,6 @@ import json
 import streamlit as st
 from pathlib import Path
 import time
-# import requests
 
 try:
     from google import genai
@@ -37,8 +36,6 @@ help_credits_llm = "Avec une requête *payante* à l'IA Google Gemini, via Googl
 gemini_client = genai.Client(api_key=api_key)
 
 default_model = 'gemini-flash-latest'
-
-# prompt_initial = """Analyse ce sujet de TP d'informatique. Identifie les exercices et questions. Propose un barème sur 20 points en respectant la difficulté relative des notions (ex: récursivité en OCaml vs manipulation de pointeurs en C). Retourne uniquement un JSON sous la forme : {"questions": [{"id": "1.a", "description": "...", "points": 2}]}"""
 
 
 example_prompt = "Bonjour, peux-tu me parler en détails du Lycée Jean-Baptiste Kléber à Strasbourg, s'il-vous-plaît ? Sois concis avant tout, si possible précis tout en restant factuellement correct. Merci !"
