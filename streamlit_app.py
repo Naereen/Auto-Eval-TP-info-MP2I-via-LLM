@@ -577,12 +577,16 @@ def get_grading_data(
             load_grading_data(tp_name, student_name, student_dir, bareme_questions),
         )
     else:
+        # Reopening the evaluation mode can reuse persisted session data while the
+        # associated number-input widgets have not been recreated yet. Re-sync the
+        # widget state here so the first displayed student immediately reflects
+        # the latest known grading values.
         set_grading_data(
             tp_name,
             student_name,
             bareme_questions,
             st.session_state[session_key],
-            sync_widgets=False,
+            sync_widgets=True,
         )
 
     return st.session_state[session_key]
@@ -1784,19 +1788,9 @@ def main() -> None:
     st.divider()
     st.markdown(
         """
-        ### Suite prévue
-        Les prochaines étapes incluent l'amélioration du mode barème et de son mode automatique par LLM/IA depuis la lecture du sujet ;
-        puis l'analyse du code et du compte-rendu d'un étudiant pour l'évaluer semi-automatiquement par LLM/IA,
-        ainsi que l'amélioration de vues des notes de la classe et de statistiques de progression individuelles au fil des TP, ou de la cohorte classe au fil de l'année.
-
         ### Suggestions ?
         Vous avez des idées ? Alors s'il-vous-plaît, [ouvrez un ticket](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new) !
-        """
-    )
 
-    st.divider()
-    st.markdown(
-        """
         ### À propos
         Dashboard développé par [Lilian BESSON](https://github.com/Naereen/) pour les TP de MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [License MIT](https://lbesson.mit-license.org/), en avril 2026.
         """
