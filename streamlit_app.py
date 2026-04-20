@@ -17,7 +17,7 @@ import statistics
 import subprocess
 import shutil
 from pathlib import Path
-from typing import Final, TypedDict
+from typing import Final, Sequence, TypedDict, cast
 
 import altair as alt
 import streamlit as st
@@ -37,7 +37,7 @@ LOGO_LYCEE: Final[str] = "logo.jpeg"
 
 # Configure the OCaml $PATH cleverly '/home/lilian/.opam/4.14.1/bin/ocaml'
 # TODO: be independant of the installed version of OCaml and Opam...
-OCAML_INTERPRETER_PATH: Final[str] = Path.home() / '.opam' / '4.14.1' / 'bin' / 'ocaml'
+OCAML_INTERPRETER_PATH: Final[Path] = Path.home() / '.opam' / '4.14.1' / 'bin' / 'ocaml'
 
 # Preferred filenames are checked first before falling back to broader glob searches.
 CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "code_rendu.ml")
@@ -51,7 +51,11 @@ OCAML_COMPILE_LOG_FILENAME: Final[str] = "ocamlopt_code_rendu.log"
 OCAML_INTERPRET_LOG_FILENAME: Final[str] = "ocaml_interpreter_code_rendu.log"
 OCAML_EXEC_LOG_FILENAME: Final[str] = "exec_code_rendu.log"
 OCAML_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
+OCAML_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
 OCAML_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
+
+# RUN_OCAML_DUNE_TESTS_JSON_OUTPUT: Final[bool] = False
+RUN_OCAML_DUNE_TESTS_JSON_OUTPUT: Final[bool] = True
 
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
@@ -294,14 +298,17 @@ def slugify_for_filename(value: str) -> str:
     return slug or "artifact"
 
 
-def run_command_and_capture_output(command: list[str], cwd: Path, log_path: Path, input_path=None, timeout=60) -> tuple[int, str]:
+def run_command_and_capture_output(
+    command: Sequence[str | Path], cwd: Path, log_path: Path, input_path=None, timeout=60
+) -> tuple[int, str]:
     """Run one command safely, save its combined output, and return the exit code plus output."""
     try:
+        command_parts = [str(part) for part in command]
         input_file = None
         if input_path:
             input_file = open(input_path, "r")
         completed = subprocess.run(
-            command,
+            command_parts,
             cwd=cwd,
             check=False,
             stdin=input_file,
@@ -323,6 +330,7 @@ def run_command_and_capture_output(command: list[str], cwd: Path, log_path: Path
     if not output.strip():
         output = "Aucune sortie.\n"
     log_path.write_text(output, encoding="utf-8")
+    read_text_file.clear()
     return exit_code, output
 
 
@@ -348,20 +356,20 @@ def render_code_log(log_path: Path, language: str, empty_message: str) -> None:
     """Render a text log in a syntax-highlighted code block."""
     log_text = load_log_text(log_path)
     if log_text:
-        st.code(log_text, language=language, line_numbers=True, wrap_lines=True, height=720)
+        st.code(log_text, language=language, line_numbers=True, wrap_lines=True, height=520)
     else:
         st.info(empty_message)
 
 
 def ansi_log_to_html(log_text: str) -> str:
     """Convert an ANSI-colored log to HTML when possible, with a safe fallback."""
-    # try:
-    #     from ansi2html import Ansi2HTMLConverter  # type: ignore[reportMissingImports]
-    #     converter = Ansi2HTMLConverter(inline=True)
-    #     return converter.convert(log_text, full=False)
-    # except ImportError:
-    escaped = html_lib.escape(log_text)
-    return f"<pre style=\"white-space: pre-wrap; font-family: monospace; margin: 0;\">{escaped}</pre>"
+    try:
+        from ansi2html import Ansi2HTMLConverter  # type: ignore[reportMissingImports]
+        converter = Ansi2HTMLConverter(inline=True)
+        return converter.convert(log_text, full=False).replace("\n", "<br>")
+    except ImportError:
+        escaped = html_lib.escape(log_text)
+        return f"<pre style=\"white-space: pre-wrap; font-family: monospace; margin: 0;\">{escaped}</pre>"
 
 
 def render_html_log(html_path: Path, empty_message: str) -> None:
@@ -371,7 +379,7 @@ def render_html_log(html_path: Path, empty_message: str) -> None:
         return
 
     html_content = read_text_file(str(html_path))
-    st.iframe(html_content, height=720)
+    st.iframe(html_content, height=520)
 
 
 def get_ocaml_tests_dir(tp_name: str) -> Path:
@@ -397,6 +405,11 @@ def get_ocaml_exec_log_path(student_dir: Path) -> Path:
 def get_ocaml_test_log_path(tp_name: str) -> Path:
     """Return the path of the dune test log for one TP."""
     return get_ocaml_tests_dir(tp_name) / OCAML_TEST_LOG_FILENAME
+
+
+def get_ocaml_test_json_path(tp_name: str) -> Path:
+    """Return the path of the dune JSON output for one TP."""
+    return get_ocaml_tests_dir(tp_name) / OCAML_TEST_JSON_FILENAME
 
 
 def get_ocaml_test_html_path(tp_name: str) -> Path:
@@ -429,7 +442,7 @@ def interpret_ocaml_submission_in_nsjail(
     log_path = get_ocaml_interpret_log_path(student_dir)
     nsjail_config = ROOT_DIR / "nsjail_config.cfg"
     exit_code, output = run_command_and_capture_output(
-        ["nsjail", "--config", str(nsjail_config), "--", OCAML_INTERPRETER_PATH, "-color", "never"],
+        ["nsjail", "--config", str(nsjail_config), "--", str(OCAML_INTERPRETER_PATH), "-color", "never"],
         cwd=student_dir,
         log_path=log_path,
         input_path=code_path,
@@ -449,7 +462,46 @@ def run_ocaml_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -
     return exit_code, log_path, output
 
 
-def run_ocaml_dune_tests(tp_name: str, code_path: Path) -> tuple[int, Path, Path, str]:
+def load_json_object(path: Path) -> object | None:
+    """Load a JSON file safely and return None when it cannot be parsed."""
+    try:
+        raw_text = read_text_file(str(path))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    candidate_text = raw_text.lstrip()
+    if not candidate_text:
+        return None
+
+    if not candidate_text.startswith(("{", "[")):
+        first_object_pos = candidate_text.find("{")
+        first_array_pos = candidate_text.find("[")
+        candidate_positions = [pos for pos in (first_object_pos, first_array_pos) if pos != -1]
+        if not candidate_positions:
+            return None
+        candidate_text = candidate_text[min(candidate_positions) :]
+
+    try:
+        parsed_value, _ = json.JSONDecoder().raw_decode(candidate_text)
+    except json.JSONDecodeError:
+        return None
+    return parsed_value
+
+def compute_ocaml_tests_note_sur_20(successes: object, failures: object) -> float:
+    """Compute an automatic note on 20 from the summary of an OCaml test run."""
+    if not isinstance(successes, (int, float)) or not isinstance(failures, (int, float)):
+        return 0.0
+
+    total_tests = float(successes) + float(failures)
+    if total_tests <= 0:
+        return 0.0
+
+    return round(20 * float(successes) / total_tests, 2)
+
+
+def run_ocaml_dune_tests(
+    tp_name: str, code_path: Path, json_mode: bool = RUN_OCAML_DUNE_TESTS_JSON_OUTPUT
+) -> tuple[int, Path, Path, str]:
     """Copy one OCaml submission into the shared dune tests and run them."""
     tests_dir = get_ocaml_tests_dir(tp_name)
     tests_dir.mkdir(parents=True, exist_ok=True)
@@ -458,16 +510,37 @@ def run_ocaml_dune_tests(tp_name: str, code_path: Path) -> tuple[int, Path, Path
     shutil.copy2(code_path, dune_code_path)
 
     log_path = get_ocaml_test_log_path(tp_name)
-    html_path = get_ocaml_test_html_path(tp_name)
+    artifact_path = get_ocaml_test_json_path(tp_name) if json_mode else get_ocaml_test_html_path(tp_name)
+
+    command: list[str | Path] = [
+        "dune",
+        "exec",
+        # "--print-metrics",
+        # "--verbose",
+        "--display=quiet",
+        "./test_code_rendu.exe",
+        "--",
+        "--show-errors",
+    ]
+    if json_mode:
+        command.append("--color")
+        command.append("never")
+        command.append("--json")
+    else:
+        command.append("--color")
+        command.append("always")
 
     exit_code, output = run_command_and_capture_output(
-        ["dune", "exe", "--print-metrics", "--display=quiet", "./test_code_rendu.exe"],
+        command,
         cwd=tests_dir,
         log_path=log_path,
     )
 
-    html_path.write_text(ansi_log_to_html(output), encoding="utf-8")
-    return exit_code, log_path, html_path, output
+    artifact_path.write_text(output, encoding="utf-8")
+    if not json_mode:
+        artifact_path.write_text(ansi_log_to_html(output), encoding="utf-8")
+    read_text_file.clear()
+    return exit_code, log_path, artifact_path, output
 
 
 def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]:
@@ -1451,16 +1524,25 @@ def render_submissions_mode(tp_name: str) -> None:
     total_points, total_points_bareme, note_sur_20 = get_current_grading_summary(
         tp_name, selected_student_name, bareme_questions
     )
+    ocaml_tests_note_key = f"ocaml_tests_note::{tp_name}::{selected_student_name or ''}"
+    raw_ocaml_tests_note = st.session_state.get(ocaml_tests_note_key)
+    ocaml_tests_note_sur_20 = (
+        float(raw_ocaml_tests_note) if isinstance(raw_ocaml_tests_note, (int, float)) else None
+    )
 
     st.title(f"Évaluation des rendus de TP - `{tp_name}`")
     st.caption(
         "Mode d'évaluation des rendus pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
     )
-    col_rendus, col_etudiant, col_total, col_note = st.columns(4)
-    col_rendus.metric("Nombre de rendus détectés", len(student_dirs))
-    col_etudiant.metric("Étudiant sélectionné", f"**{selected_student_name}**" or "aucun")
-    col_total.metric("Points obtenus", f"{total_points} / {total_points_bareme}")
-    col_note.metric("Note", f"{note_sur_20}/20")
+    col_rendus, col_etudiant, col_total, col_note, col_tests_note = st.columns(5)
+    col_rendus.metric("**Nombre de rendus détectés**", len(student_dirs))
+    col_etudiant.metric("**Étudiant sélectionné**", f"**{selected_student_name}**" or "aucun")
+    col_total.metric("**Points obtenus**", f"{total_points} / {total_points_bareme}")
+    col_note.metric("**Note**", f"{note_sur_20}/20")
+    col_tests_note.metric(
+        "**Note tests**",
+        f"{ocaml_tests_note_sur_20}/20" if ocaml_tests_note_sur_20 is not None else "—",
+    )
 
     subject_col, grading_col, student_col = st.columns((0.7, 0.3, 0.8), gap="small")
 
@@ -1468,7 +1550,7 @@ def render_submissions_mode(tp_name: str) -> None:
         render_subject_panel(tp_name)
 
     with grading_col:
-        st.subheader("Évaluation")
+        st.subheader("Évaluation du rendu")
         if selected_student_dir is None:
             st.info("Sélectionnez un rendu étudiant pour saisir l'évaluation question par question.")
         elif not bareme_questions:
@@ -1616,11 +1698,11 @@ def render_submissions_mode(tp_name: str) -> None:
                     st.success(f"Notation sauvegardée dans {get_notes_path(selected_student_dir).name}.")
 
     with student_col:
-        st.subheader("Rendu étudiant")
+        st.subheader("Fichiers rendus par l'étudiant")
         if selected_student_dir is None:
             st.info("Aucun rendu étudiant disponible pour ce TP.")
         else:
-            tabs = st.tabs(["Code source", "Rapport PDF", "Compte-rendu (Markdown)", "(Fichiers rendus)"])
+            tabs = st.tabs(["Code source", "Rapport PDF", "Compte-rendu (Markdown)", "Fichiers rendus"])
 
             with tabs[0]:
                 if code_path is None:
@@ -1652,7 +1734,7 @@ def render_submissions_mode(tp_name: str) -> None:
 
 
     st.divider()
-    st.subheader("Outils d'évaluation de code OCaml semi-automatisés")
+    st.subheader("Outils d'évaluation de code OCaml semi-automatisé")
     st.caption(
         "Aucune action n'est lancée automatiquement : la compilation, l'exécution NsJail et les tests Dune ne démarrent qu'après clic explicite sur un bouton."
     )
@@ -1666,7 +1748,7 @@ def render_submissions_mode(tp_name: str) -> None:
         return
 
     compiled_exe_path = get_ocaml_compiled_exe_path(tp_name, selected_student_name or "")
-    ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Interpréter dans la safebox", "C - Exécuter dans la safebox", "D - Tests complets"])
+    ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Interpréter dans la safebox", "C - Exécuter dans la safebox", "D - Tests complets", "E - (TODO) Auto-évaluation complète en un clic"])
 
     with ocaml_tools_tabs[0]:
         st.write("Compiler le fichier OCaml rendu, mais sans prendre encore le risque de lancer le binaire (il faut rester un peu prudent).")
@@ -1740,27 +1822,61 @@ def render_submissions_mode(tp_name: str) -> None:
             )
 
         if st.button("Lancer les tests (Dune)", key=test_button_key, type="primary", width='stretch'):
-            exit_code, _, html_path, output = run_ocaml_dune_tests(tp_name, code_path)
+            exit_code, log_path, artifact_path, output = run_ocaml_dune_tests(
+                tp_name, code_path, json_mode=RUN_OCAML_DUNE_TESTS_JSON_OUTPUT
+            )
             if exit_code == 0:
-                st.success(f"Tests Dune terminés avec succès. Le rendu HTML a été généré dans {html_path.name}.")
+                st.success(f"Tests Dune terminés entièrement avec succès. Le rendu a été généré dans `{artifact_path.name}`.")
+            else:
+                st.success(f"Tests Dune terminés avec une erreur, et le code de retour {exit_code}. Le rendu a-t-il été généré dans `{artifact_path.name}` ?")
 
-                st.markdown("**Sortie de cette commande Bash (log)**")
-                # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
+            st.markdown("**Sortie de cette commande Bash (log)**")
+            # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
 
-                test_html_tab, test_log_tab = st.tabs(["HTML coloré", "Log brut"])
-                with test_html_tab:
+            test_html_tab, test_log_tab = st.tabs(["Jolie sortie", "Log brut"])
+            with test_html_tab:
+                if RUN_OCAML_DUNE_TESTS_JSON_OUTPUT:
+                    if artifact_path and artifact_path.exists():
+                        json_payload = load_json_object(artifact_path)
+                        if json_payload is None:
+                            st.error(
+                                f"Le fichier JSON {artifact_path.name} n'a pas pu être lu correctement."
+                            )
+                            st.code(read_text_file(str(artifact_path)), language="json", line_numbers=True, wrap_lines=True, height=520)
+                        else:
+                            st.json(json_payload)
+                            if isinstance(json_payload, dict):
+                                json_payload_dict = cast(dict[str, object], json_payload)
+                                success = json_payload_dict.get("success")
+                                failures = json_payload_dict.get("failures")
+                                time = json_payload_dict.get("time")
+                                ocaml_tests_note_sur_20 = compute_ocaml_tests_note_sur_20(success, failures)
+                                st.session_state[ocaml_tests_note_key] = ocaml_tests_note_sur_20
+
+                                st.metric("**Note tests**", f"{ocaml_tests_note_sur_20}/20")
+                                st.caption(
+                                    f"Résumé des tests Dune : {success} succès, {failures} échec(s), temps d'exécution {time}s."
+                                )
+                            else:
+                                st.warning("Le contenu JSON des tests n'a pas le format attendu.")
+                    else:
+                        st.warning("Aucun rendu JSON des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.")
+                else:  # HTML, by default
                     render_html_log(
-                        get_ocaml_test_html_path(tp_name),
+                        artifact_path,
                         "Aucun rendu HTML des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
                     )
-                with test_log_tab:
-                    render_code_log(
-                        get_ocaml_test_log_path(tp_name),
-                        detect_language(code_path),
-                        "Aucun log de tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
-                    )
-            else:
-                st.warning(f"Tests Dune terminés avec le code de retour {exit_code}.")
+            with test_log_tab:
+                render_code_log(
+                    log_path,
+                    detect_language(code_path),
+                    "Aucun log de tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                )
+
+    with ocaml_tools_tabs[4]:
+        st.write("Lancer un processus complet d'évaluation quasi-automatique du code rendu par l'étudiant, de la compilation à la lecture du fichier JSON produit par Alcotest (`dune exec`).")
+        pass
+        # TODO: ici, il faudrait un bouton qui fasse le job de la compilation (étape "A - Compiler") et ("D - Tests complets") en un seul clic... pas facile ?
 
 
 def render_classroom_mode(tp_name: str) -> None:
@@ -2129,18 +2245,23 @@ def main() -> None:
         st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
         return
     elif selected_mode == "1 - Barème":
-        selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
+        selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut rédiger son barème", tp_names)
         render_bareme_mode(selected_tp)
+
+    # TODO: ajouter un mode intermédiaire entre les modes actuellement numérotés "1 - Barème" et "2 - Évaluation des rendus", qui s'occupera de générer via LLM-AI (Google Gemini Flash 3.1) un super fichier de test via Alcotest et QCheck, si aucun tel fichier de test n'est encore présent
+    # TODO: Inspire toi des morceaux qui se sont occupés de "✨ Proposer un barème automatique par IA ? ✨" et de "✨ Proposer une notaton automatique par IA ? ✨"
+    # TODO: ce mode intermédiaire pourrait s'appeler "2 - Génération automatisé de tests OCaml", et décaler les numéros des options suivantes
+
     elif selected_mode == "2 - Évaluation des rendus":
-        selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
+        selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut évaluer les documents rendus par la classe", tp_names)
         render_submissions_mode(selected_tp)
     elif selected_mode == "3 - Vue de la classe par TP":
-        selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
+        selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut visualiser les performances de la classe", tp_names)
         render_classroom_mode(selected_tp)
     elif selected_mode == "4 - Progression annuelle individuelle":
         render_individual_progress_mode()
     else:
-        render_placeholder_mode("TP à sélectionner", selected_mode)
+        render_placeholder_mode("TODO: TP à sélectionner", selected_mode)
 
     st.sidebar.subheader("À propos de cet outil ?")
     st.sidebar.markdown("Vous avez des *idées* ? Un *bug* à signaler ? [Ouvrez un ticket sur GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new) !")

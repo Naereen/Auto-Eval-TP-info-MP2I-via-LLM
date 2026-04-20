@@ -21,9 +21,9 @@ J'ai intégré un seul exemple d'un de mes petits sujets de TP, et de trois (fau
 
 - [rendus-des-etudiants/03-types-polymorphes-etc-ocaml/](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/) qui contient des rendus synthétiques de trois faux étudiants : un étudiant excellent qui produit quasiment un corrigé, un étudiant plutôt moyen et un étudiant au niveau très bas :
 
-  1. [Étudiant excellent](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) 
-  2. [Étudiant moyen](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/notes.json) 
-  3. [Étudiant plutôt faible](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/notes.json) 
+  1. [Étudiant excellent](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) ;
+  2. [Étudiant moyen](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT2_Etudiant2/notes.json) ;
+  3. [Étudiant plutôt faible](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/) : [son rendu en Markdown](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.md), [et compilé en PDF](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.pdf), [son code (en OCaml sur cet exemple)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/compte_rendu.md), et [ses notes (encore générées automatiquement par IA !)](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT3_Etudiant3/notes.json).
 
 --------
 
@@ -147,11 +147,12 @@ Le mode Progression annuelle individuelle permet de :
 
 - `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini, depuis le dashboard aussi !) ;
 
+- `rendus-des-etudiants/<tp>/<rendu>/ocamlopt_code_rendu.log` et `exec_code_rendu.log` : logs de compilation et d'exécution pour les rendus OCaml évalués à la demande ;
+- `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.log` et `test_code_rendu.html` : sortie brute et rendu HTML coloré des tests Dune exécutés à la demande.
+
 ```json
 {
 
-- `rendus-des-etudiants/<tp>/<rendu>/ocamlopt_code_rendu.log` et `exec_code_rendu.log` : logs de compilation et d'exécution pour les rendus OCaml évalués à la demande ;
-- `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.log` et `test_code_rendu.html` : sortie brute et rendu HTML coloré des tests Dune exécutés à la demande.
   "format_version": 1,
   "tp_name": "03-types-polymorphes-etc-ocaml",
   "student_name": "ETUDIANT1_Etudiant1",
@@ -211,7 +212,7 @@ cd rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1
 dune runtest
 ```
 
-Depuis le dashboard, le mode `2 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans NsJail, puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
+Depuis le dashboard, le mode `2 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans [NsJail](https://nsjail.dev/), puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
 
 ------
 
