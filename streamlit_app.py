@@ -18,7 +18,7 @@ import altair as alt
 import streamlit as st
 
 # Local module
-from gemini_requests import response_from_llm
+from gemini_requests import response_from_llm, help_credits_llm
 
 
 # Parameters of the app and utility functions to manage the repository structure and persist grading data.
@@ -94,6 +94,13 @@ def find_subject_tex_files(tp_name: str) -> list[Path]:
     """List LaTeX sources associated with a practical session."""
     tp_dir = get_subject_dir(tp_name)
     return sorted(tp_dir.glob("*.tex"))
+
+
+@st.cache_data(show_spinner=True)
+def find_subject_markdown_files(tp_name: str) -> list[Path]:
+    """List Markdown sources associated with a practical session."""
+    tp_dir = get_subject_dir(tp_name)
+    return sorted(tp_dir.glob("*.md"))
 
 
 @st.cache_data(show_spinner=True)
@@ -312,6 +319,48 @@ def build_bareme_from_llm_response(tp_name: str, response: object) -> tuple[dict
     return normalize_bareme_data(tp_name, candidate_bareme), None
 
 
+def get_grading_llm_response_key(tp_name: str, student_name: str) -> str:
+    """Return the session key used to store the last AI-generated grading response."""
+    return f"grading_llm_response::{tp_name}::{student_name}"
+
+
+def set_grading_data(
+    tp_name: str,
+    student_name: str,
+    bareme_questions: list[dict[str, object]],
+    grading_data: dict[str, object],
+    *,
+    sync_widgets: bool = True,
+) -> dict[str, object]:
+    """Normalize and store one student's grading data, optionally syncing its widgets."""
+    normalized_grading = normalize_grading_data(tp_name, student_name, bareme_questions, grading_data)
+    st.session_state[get_grading_session_key(tp_name, student_name)] = normalized_grading
+    if sync_widgets:
+        sync_grading_widgets(tp_name, student_name, normalized_grading)
+    return normalized_grading
+
+
+def build_grading_from_llm_response(
+    tp_name: str,
+    student_name: str,
+    bareme_questions: list[dict[str, object]],
+    response: object,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Validate one AI response and convert it into normalized grading data."""
+    parsed_response = parse_llm_json_object(response)
+    if parsed_response is None:
+        return None, "La réponse de l'IA n'est pas un objet JSON exploitable."
+
+    raw_questions = parsed_response.get("questions")
+    if not isinstance(raw_questions, list) or not raw_questions:
+        return None, "La réponse de l'IA ne contient pas de liste de questions exploitable."
+
+    candidate_grading = dict(parsed_response)
+    candidate_grading["tp_name"] = tp_name
+    candidate_grading["student_name"] = student_name
+    return normalize_grading_data(tp_name, student_name, bareme_questions, candidate_grading), None
+
+
 def get_grading_points_widget_key(tp_name: str, student_name: str, question_index: int) -> str:
     """Return the widget key used by the grading editor for one student question."""
     return f"grading_points::{tp_name}::{student_name}::{question_index}"
@@ -459,14 +508,19 @@ def get_grading_data(
 
     session_key = get_grading_session_key(tp_name, student_name)
     if session_key not in st.session_state:
-        st.session_state[session_key] = load_grading_data(tp_name, student_name, student_dir, bareme_questions)
-        sync_grading_widgets(tp_name, student_name, st.session_state[session_key])
+        set_grading_data(
+            tp_name,
+            student_name,
+            bareme_questions,
+            load_grading_data(tp_name, student_name, student_dir, bareme_questions),
+        )
     else:
-        st.session_state[session_key] = normalize_grading_data(
+        set_grading_data(
             tp_name,
             student_name,
             bareme_questions,
             st.session_state[session_key],
+            sync_widgets=False,
         )
 
     return st.session_state[session_key]
@@ -488,8 +542,7 @@ def ensure_selected_grading_loaded(
         return
 
     loaded_grading_data = load_grading_data(tp_name, student_name, student_dir, bareme_questions)
-    st.session_state[get_grading_session_key(tp_name, student_name)] = loaded_grading_data
-    sync_grading_widgets(tp_name, student_name, loaded_grading_data)
+    set_grading_data(tp_name, student_name, bareme_questions, loaded_grading_data)
 
 
 def get_current_grading_summary(
@@ -868,6 +921,7 @@ def render_subject_panel(tp_name: str) -> None:
     """Render the subject PDF and LaTeX metadata for the selected practical session."""
     subject_pdf = find_subject_pdf(tp_name)
     tex_files = find_subject_tex_files(tp_name)
+    markdown_files = find_subject_markdown_files(tp_name)
 
     st.subheader("Sujet du TP")
     if subject_pdf is not None:
@@ -879,6 +933,10 @@ def render_subject_panel(tp_name: str) -> None:
     if tex_files:
         tex_names = ", ".join(f"`{path.name}`" for path in tex_files)
         st.caption(f"Sources LaTeX détectées : {tex_names}")
+
+    if markdown_files:
+        markdown_names = ", ".join(f"`{path.name}`" for path in markdown_files)
+        st.caption(f"Sources LaTeX détectées : {markdown_names}")
 
 
 def render_bareme_mode(tp_name: str) -> None:
@@ -924,10 +982,10 @@ def render_bareme_mode(tp_name: str) -> None:
         if st.button("Appliquer un même barème à toutes les questions", width='stretch'):
             st.session_state[uniform_points_state_key] = not st.session_state[uniform_points_state_key]
 
-        if st.button("✨ Proposer un barème automatique par AI ✨", width='stretch', help="Par une requête à Google Gemini via Google AI Studio, cf. https://aistudio.google.com/ si vous souhaitez configurer votre propre accès."):
+        if st.button("✨ Proposer un barème automatique par IA ✨", width='stretch', help=f"Analyse le sujet PDF et ses sources LaTeX et Markdown, pour proposer un barème qui pourra être sauvegardé dans un fichier local. {help_credits_llm}"):
             # On construit le prompt
             prompt = """
-            Analyse ce sujet de Travaux Pratiques  d'Informatique, je t'ai joint le sujet en PDF et ses sources LaTeX.
+            Analyse ce sujet de Travaux Pratiques  d'Informatique, je t'ai joint le sujet en PDF et ses sources LaTeX et Markdown.
             Identifie les exercices et questions.
 
             Propose un barème avec chaque questions entre 1 et 10 points (1 point si question très facile, 10 points si question plutôt dure), en respectant la difficulté relative des notions (ex: récursivité terminale en OCaml vs manipulation de pointeurs en C).
@@ -941,6 +999,7 @@ def render_bareme_mode(tp_name: str) -> None:
 
             subject_pdf = find_subject_pdf(tp_name)
             tex_files = find_subject_tex_files(tp_name)
+            markdown_files = find_subject_markdown_files(tp_name)
 
             with st.spinner("Requête à l'IA en cours..."):
                 response = response_from_llm(
@@ -951,6 +1010,7 @@ def render_bareme_mode(tp_name: str) -> None:
                     # paths_json=None,
                     paths_source=
                         tex_files
+                        + markdown_files
                         # + ocaml_files  # TODO: support this!
                         # + c_files  # TODO: support this!
                     ,
@@ -1068,6 +1128,14 @@ def render_submissions_mode(tp_name: str) -> None:
     if selected_student_name:
         selected_student_dir = next((path for path in student_dirs if path.name == selected_student_name), None)
 
+    code_path = None
+    report_pdf = None
+    report_md = None
+    if selected_student_dir is not None:
+        code_path = find_student_code(selected_student_dir)
+        report_pdf = find_student_report_pdf(selected_student_dir)
+        report_md = find_student_report_markdown(selected_student_dir)
+
     ensure_selected_grading_loaded(tp_name, selected_student_name, selected_student_dir, bareme_questions)
     grading_data = get_grading_data(tp_name, selected_student_name, selected_student_dir, bareme_questions)
 
@@ -1098,10 +1166,93 @@ def render_submissions_mode(tp_name: str) -> None:
         elif not bareme_questions:
             st.warning("Aucun barème n'est disponible pour ce TP. Commencez par renseigner le mode « 1 - Barème ».")
         else:
-
-            # TODO: ajouter le mode « auto evaluate » pour cette partie aussi
-
             student_identifier = selected_student_name or ""
+
+            if selected_student_name and selected_student_dir is not None:
+                if st.button(
+                    "✨ Proposer une notation automatique par IA ✨",
+                    width='stretch',
+                    help=f"Analyse le sujet, le barème sauvegardé, le code rendu et le compte-rendu pour proposer une notation question par question. {help_credits_llm}",
+                ):
+                    prompt = f"""
+                    Analyse ce rendu de Travaux Pratiques d'Informatique.
+
+                    Je te donne :
+                    - le sujet du TP en PDF et ses sources LaTeX,
+                    - le barème JSON courant du sujet,
+                    - le code rendu par l'étudiant,
+                    - le compte-rendu de l'étudiant en Markdown, ou en PDF si le Markdown n'est pas disponible.
+
+                    Évalue chaque question du barème. Attribue un nombre entier de points entre 0 et le maximum de la question.
+                    Calcule ensuite le total des points obtenus et la note sur 20 correspondante.
+
+                    Réponds uniquement avec un JSON de cette forme (par exemple) :
+
+                    {{ "format_version": 1, "tp_name": "{tp_name}", "student_name": "{selected_student_name}", "question_count": {len(bareme_questions)}, "total_points_awarded": 57, "total_points_bareme": {sum(get_question_points(question) for question in bareme_questions)}, "note_sur_20": 12.67, "questions": [ {{ "index": 1, "label": "Question 1", "max_points": 10, "points_awarded": 10 }}, ..., {{ "index": {len(bareme_questions)}, "label": "Question {len(bareme_questions)}", "max_points": 10, "points_awarded": 9 }} ] }}
+
+                    Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
+                    """
+
+                    system_prompt = "Tu es une IA utile et efficace, experte en informatique en français. Tu vas m'aider, moi je suis professeur d'informatique en classes préparatoires CPGE, filière MP2I, en France."
+
+                    subject_pdf = find_subject_pdf(tp_name)
+                    tex_files = find_subject_tex_files(tp_name)
+                    markdown_files = find_subject_markdown_files(tp_name)
+                    bareme_path = get_bareme_path(tp_name)
+                    pdf_paths: list[Path] = []
+                    if subject_pdf is not None:
+                        pdf_paths.append(subject_pdf)
+                    if report_md is None and report_pdf is not None:
+                        pdf_paths.append(report_pdf)
+
+                    source_paths: list[Path] = list(tex_files) + list(markdown_files)
+                    if code_path is not None:
+                        source_paths.append(code_path)
+                    if report_md is not None:
+                        source_paths.append(report_md)
+
+                    json_paths: list[Path] = []
+                    if bareme_path.exists():
+                        json_paths.append(bareme_path)
+
+                    additional_messages: list[str] | None = None
+                    if not json_paths:
+                        additional_messages = [
+                            "Barème JSON courant :\n" + json.dumps(normalize_bareme_data(tp_name, bareme_data), ensure_ascii=False, indent=2)
+                        ]
+
+                    with st.spinner("Requête à l'IA en cours..."):
+                        response = response_from_llm(
+                            prompt=prompt,
+                            system_prompt=system_prompt,
+                            additionnal_messages=additional_messages,
+                            paths_pdf=pdf_paths or None,
+                            paths_json=json_paths or None,
+                            paths_source=source_paths or None,
+                            force_json_response=True,
+                        )
+
+                    st.session_state[get_grading_llm_response_key(tp_name, selected_student_name)] = response
+                    llm_grading, error_message = build_grading_from_llm_response(
+                        tp_name,
+                        selected_student_name,
+                        bareme_questions,
+                        response,
+                    )
+                    if llm_grading is None:
+                        st.error(error_message or "La réponse de l'IA n'a pas pu être convertie en notation.")
+                    else:
+                        set_grading_data(tp_name, selected_student_name, bareme_questions, llm_grading)
+                        st.success("La notation proposée par l'IA a été injectée dans l'éditeur courant.")
+                        st.rerun()
+
+                grading_llm_response_key = get_grading_llm_response_key(tp_name, selected_student_name)
+                if grading_llm_response_key in st.session_state:
+                    with st.expander("Afficher la réponse brute de l'IA pour la notation (JSON)"):
+                        with st.container(height=420):
+                            # st.markdown("#### Dernier résultat JSON proposé par l'IA")
+                            st.json(st.session_state[grading_llm_response_key])
+
             updated_grades: list[int] = []
             updated_questions: list[dict[str, object]] = []
             with st.container(height=720):
@@ -1150,7 +1301,7 @@ def render_submissions_mode(tp_name: str) -> None:
                     "note_sur_20": note_sur_20,
                     "questions": updated_questions,
                 }
-                st.session_state[get_grading_session_key(tp_name, selected_student_name)] = grading_data
+                set_grading_data(tp_name, selected_student_name, bareme_questions, grading_data, sync_widgets=False)
 
                 if st.button("Sauvegarder la notation", type="primary", width='stretch'):
                     save_grading_data(selected_student_dir, grading_data)
@@ -1162,10 +1313,6 @@ def render_submissions_mode(tp_name: str) -> None:
         if selected_student_dir is None:
             st.info("Aucun rendu étudiant disponible pour ce TP.")
         else:
-            code_path = find_student_code(selected_student_dir)
-            report_pdf = find_student_report_pdf(selected_student_dir)
-            report_md = find_student_report_markdown(selected_student_dir)
-
             tabs = st.tabs(["Code source", "Compte-rendu PDF", "Compte-rendu brut", "Fichiers rendus"])
 
             with tabs[0]:

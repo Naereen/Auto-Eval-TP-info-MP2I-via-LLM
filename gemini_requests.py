@@ -32,6 +32,8 @@ if not api_key:
     api_key = st.secrets["GOOGLE_API_KEY"]
 
 
+help_credits_llm = "Avec une requête *payante* à l'IA Google Gemini, via Google AI Studio. Cf. https://aistudio.google.com/ si vous souhaitez configurer votre propre accès ou monitorer le coût de vos requêtes précédentes"
+
 gemini_client = genai.Client(api_key=api_key)
 
 default_model = 'gemini-flash-latest'
@@ -73,7 +75,7 @@ def response_from_llm(
 
     if paths_json:
         for chemin_json in paths_json:
-            with open(chemin_json, "rb", encoding="utf-8") as f:
+            with open(chemin_json, "rb") as f:
                 json_data = f.read()
                 contents.append(
                     types.Part.from_bytes(data=json_data, mime_type="application/json")

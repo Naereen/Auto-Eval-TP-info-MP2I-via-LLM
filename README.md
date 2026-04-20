@@ -16,6 +16,7 @@ Premier jet disponible : un dashboard Streamlit en Python 3 permet de
 - faire défiler la liste des questions du barème dans une zone dédiée, tout en gardant le sujet PDF visible dans la colonne de gauche ;
 - utiliser le mode `Évaluation des rendus` pour sélectionner un rendu étudiant dans `rendus-des-etudiants/<tp>/` ;
 - utiliser le barème défini dans le mode `Barème` pour saisir, question par question, les points attribués à un rendu étudiant ;
+- proposer une notation automatique par IA à partir du sujet, de ses sources, du `bareme.json`, du code rendu et du compte-rendu étudiant, puis injecter directement le JSON renvoyé dans l'éditeur courant ;
 - calculer automatiquement le total obtenu et afficher une note sur 20 dans la colonne d'évaluation, ainsi que dans les indicateurs affichés en haut de la vue ;
 - sauvegarder la notation d'un étudiant dans `rendus-des-etudiants/<tp>/<rendu>/notes.json` et la recharger automatiquement lors d'une réouverture ;
 - utiliser le mode `Vue de la classe par TP` pour synthétiser les notes déjà sauvegardées de toute la classe sur un TP donné ;

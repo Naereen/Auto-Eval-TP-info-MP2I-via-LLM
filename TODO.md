@@ -7,7 +7,8 @@
 - [x] pré-remplissage du mode barème par une proposition JSON issue d'un LLM/IA, avec injection directe dans l'éditeur courant.
 - TODO: fiabiliser et affiner la génération automatique du barème par LLM/IA depuis la lecture du sujet (LaTeX ou PDF).
 
-- TODO: l'analyse du code et du compte-rendu (Markdown ou PDF) de chaque étudiant, pour l'évaluer semi-automatiquement par des appels à un LLM/IA,
+- [x] pré-remplissage du mode évaluation par une proposition JSON issue d'un LLM/IA, avec injection directe dans l'éditeur courant.
+- TODO: fiabiliser et affiner la notation automatique par LLM/IA depuis le sujet, le barème, le code rendu et le compte-rendu étudiant.
 
 - [x] l'ajout de vues des notes de la classe pour un TP fixé et donné.
 
@@ -28,6 +29,7 @@
 ## Tester le mode Évaluation des rendus
 
 - Vérifier que chaque question reprend bien le maximum défini dans le barème du TP.
+- Vérifier que le bouton de proposition automatique par IA injecte bien le JSON renvoyé dans l'éditeur de notation courant.
 - Vérifier que le total obtenu et la note sur 20 se mettent à jour après chaque saisie.
 - Vérifier que le changement d'étudiant conserve une saisie indépendante pour chaque rendu.
 - Vérifier la sauvegarde de `notes.json` dans le dossier de rendu de l'étudiant.
