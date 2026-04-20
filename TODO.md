@@ -7,14 +7,25 @@ Ce document ne décrit pas les fonctionnalités déjà livrées. Il recense uniq
 - Supporter des TP qui demandent des rendus de code source en plusieurs fichiers.
 - Ajouter une vue de statistiques de cohorte à l'échelle de l'année.
 
-## À fiabiliser ou corriger
+## À fiabiliser ou corriger (pas urgent)
 
 - Affiner la génération automatique du barème par LLM/IA à partir du sujet LaTeX, Markdown ou PDF.
 - Affiner la notation automatique par LLM/IA à partir du sujet, du barème, du code rendu et du compte-rendu étudiant.
 - Vérifier la robustesse des réponses JSON retournées par l'IA quand certaines pièces jointes sont absentes.
 - Mieux gérer les cas limites où un TP existe sans sujet PDF, sans sources complémentaires, ou avec des rendus partiels.
 
+## À corriger (urgent)
+
+- Quand je charge le mode "2 - Évaluation des rendus", la note d'un étudiant à un TP donné n'est apparemment pas chargée par défaut depuis le fichier `notes.json`. Par contre, depuis ce mode 2, si je change d'étudiant et que je reviens sur le premier étudiant, ses notes sont bien chargées... BUG! TODO: FIXME!
+
+------
+
 ## Tests manuels à faire
+
+## Tester le mode Documentation
+
+- Vérifier que le mode `0 - Documentation` reste accessible même si aucun TP n'est détecté.
+- Vérifier que les explications sur les modes, les fichiers attendus et les fichiers générés sont cohérentes avec le comportement réel du dashboard.
 
 ## Tester le mode Barème
 

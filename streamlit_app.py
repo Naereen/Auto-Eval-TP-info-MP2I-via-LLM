@@ -35,6 +35,7 @@ NOTES_FILENAME: Final[str] = "notes.json"
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
 APP_MODES: Final[tuple[str, ...]] = (
+    "0 - Documentation",
     "1 - Barème",
     "2 - Évaluation des rendus",
     "3 - Vue de la classe par TP",
@@ -1637,6 +1638,105 @@ def render_individual_progress_mode() -> None:
     st.dataframe(evaluated_rows, width="stretch", hide_index=True)
 
 
+def render_documentation_mode() -> None:
+    """Render an integrated help page describing the dashboard workflows."""
+    tp_names = discover_tp_names()
+    student_names = discover_all_student_names()
+    submission_count = sum(len(discover_student_dirs(tp_name)) for tp_name in tp_names)
+
+    st.title("Documentation intégrée du dashboard")
+    st.caption(
+        "Cette page résume le fonctionnement de l'outil, l'ordre conseillé d'utilisation et les fichiers produits pendant l'évaluation."
+    )
+
+    top_col_1, top_col_2, top_col_3 = st.columns(3)
+    top_col_1.metric("TP détectés", len(tp_names))
+    top_col_2.metric("Rendus détectés", submission_count)
+    top_col_3.metric("Étudiants détectés", len(student_names))
+
+    st.subheader("Prise en main rapide")
+    st.markdown(
+        """
+        1. Choisir le mode `1 - Barème` pour préparer le barème d'un TP.
+        2. Vérifier le sujet affiché à gauche, puis renseigner ou faire proposer les questions et leurs points.
+        3. Passer au mode `2 - Évaluation des rendus` pour noter un étudiant question par question.
+        4. Sauvegarder les notes, puis consulter les synthèses dans les modes `3` et `4`.
+        """
+    )
+
+    st.subheader("Rôle de chaque mode")
+    mode_rows = [
+        {
+            "Mode": "0 - Documentation",
+            "Usage": "Relire le fonctionnement de l'application, les conventions de fichiers et l'ordre conseillé des actions.",
+        },
+        {
+            "Mode": "1 - Barème",
+            "Usage": "Définir le nombre de questions, leurs libellés, leurs points et sauvegarder le `bareme.json` du TP.",
+        },
+        {
+            "Mode": "2 - Évaluation des rendus",
+            "Usage": "Ouvrir un rendu étudiant, lire son code et son rapport, puis saisir ou pré-remplir la notation avant sauvegarde.",
+        },
+        {
+            "Mode": "3 - Vue de la classe par TP",
+            "Usage": "Consulter les statistiques globales d'un TP à partir des `notes.json` déjà sauvegardés.",
+        },
+        {
+            "Mode": "4 - Progression annuelle individuelle",
+            "Usage": "Suivre un étudiant sur l'ensemble des TP déjà évalués durant l'année.",
+        },
+    ]
+    st.dataframe(mode_rows, width="stretch", hide_index=True)
+
+    left_col, right_col = st.columns((1, 1), gap="large")
+    with left_col:
+        st.subheader("Fichiers attendus")
+        st.markdown(
+            """
+            - `sujets-de-travaux-pratiques/<tp>/` contient le sujet, idéalement en PDF, avec éventuellement ses sources LaTeX ou Markdown.
+            - `rendus-des-etudiants/<tp>/<etudiant>/` contient le code rendu et, si disponible, un compte-rendu PDF ou Markdown.
+            - Le dashboard recherche en priorité `code_rendu.c` ou `code_rendu.ml`.
+            - Les noms `compte-rendu.pdf`, `compte_rendu.pdf`, `compte-rendu.md` et `compte_rendu.md` sont reconnus automatiquement.
+            """
+        )
+
+        st.subheader("Fichiers générés")
+        st.markdown(
+            """
+            - `bareme.json` est sauvegardé dans le dossier du TP.
+            - `notes.json` est sauvegardé dans le dossier du rendu étudiant.
+            - Les vues de synthèse lisent uniquement ces fichiers sauvegardés.
+            """
+        )
+
+    with right_col:
+        st.subheader("Fonctionnalités IA")
+        st.markdown(
+            f"""
+            - Le mode `1 - Barème` peut proposer un barème automatique à partir du sujet et de ses sources.
+            - Le mode `2 - Évaluation des rendus` peut proposer une notation automatique à partir du sujet, du barème, du code et du compte-rendu.
+            - Dans les deux cas, la proposition IA est injectée dans l'éditeur courant, puis reste modifiable avant sauvegarde.
+            - À propos de ces requêtes AI : {help_credits_llm}
+            """
+        )
+
+        st.subheader("Conseils d'usage")
+        st.markdown(
+            """
+            - Commencer par sauvegarder un barème stable avant d'évaluer plusieurs étudiants.
+            - Relire les propositions IA avant sauvegarde, surtout si le sujet ou le rendu est incomplet.
+            - Utiliser les vues de synthèse uniquement après avoir sauvegardé les notations individuelles.
+            """
+        )
+
+    with st.expander("Afficher les TP actuellement détectés"):
+        if tp_names:
+            st.write("- " + "\n- ".join(tp_names))
+        else:
+            st.info("Aucun TP n'est actuellement détecté dans le dépôt.")
+
+
 def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
     """Render a placeholder for future dashboard modes that are not implemented yet."""
     st.title("Dashboard d'évaluation et de pilotage des TP")
@@ -1657,15 +1757,17 @@ def main() -> None:
     )
 
     tp_names = discover_tp_names()
-    if not tp_names:
-        st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
-        return
 
     st.sidebar.title("Evaluator TP MP2I")
     st.sidebar.subheader("Navigation")
     selected_mode = st.sidebar.selectbox("Choisir un mode", APP_MODES, index=0)
 
-    if selected_mode == "1 - Barème":
+    if selected_mode == "0 - Documentation":
+        render_documentation_mode()
+    elif not tp_names:
+        st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
+        return
+    elif selected_mode == "1 - Barème":
         selected_tp = st.sidebar.selectbox("Choisir un TP", tp_names)
         render_bareme_mode(selected_tp)
     elif selected_mode == "2 - Évaluation des rendus":

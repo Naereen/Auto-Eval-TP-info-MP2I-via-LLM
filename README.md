@@ -19,8 +19,19 @@ Ce dépôt contient un dashboard Streamlit destiné à aider un enseignant à :
 
 Le dashboard permet de :
 
+- ouvrir un mode `0 - Documentation` directement dans l'application pour relire son fonctionnement ;
 - sélectionner un TP parmi ceux présents dans `sujets-de-travaux-pratiques` ;
 - choisir un mode de travail dans la navigation latérale ;
+
+### Mode `0 - Documentation`
+
+Le mode Documentation permet de :
+
+- expliquer l'ordre conseillé d'utilisation du dashboard ;
+- rappeler le rôle de chaque mode ;
+- documenter les fichiers attendus dans le dépôt ;
+- préciser où sont sauvegardés `bareme.json` et `notes.json` ;
+- résumer la place des fonctionnalités d'assistance par IA dans le flux de travail.
 
 ### Mode `1 - Barème`
 
