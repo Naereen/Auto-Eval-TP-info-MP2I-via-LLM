@@ -1100,6 +1100,18 @@ def compute_ocaml_tests_note_sur_20(successes: object, failures: object) -> floa
     return round(20 * float(successes) / total_tests, 2)
 
 
+def compute_criterion_tests_note_sur_20(passed: object, failed: object, errored: object) -> float:
+    """Compute an automatic note on 20 from the summary of a Criterion test run."""
+    if not isinstance(passed, (int, float)) or not isinstance(failed, (int, float)) or not isinstance(errored, (int, float)):
+        return 0.0
+
+    total_tests = float(passed) + float(failed) + float(errored)
+    if total_tests <= 0:
+        return 0.0
+
+    return round(20 * float(passed) / total_tests, 2)
+
+
 def get_tests_note_key(tp_name: str, student_name: str | None) -> str:
     """Return the session key used to store the automatic test grade for one student."""
     return f"tests_note::{tp_name}::{student_name or ''}"
@@ -1111,19 +1123,18 @@ def get_tests_note_sur_20(tp_name: str, student_name: str | None) -> float | Non
     return float(raw_note) if isinstance(raw_note, (int, float)) else None
 
 
-def set_ocaml_tests_note_sur_20(tp_name: str, student_name: str | None, note_sur_20: float | None) -> float | None:
-    """Store or clear the automatic OCaml test grade for one student in session state."""
+def set_tests_note_sur_20(tp_name: str, student_name: str | None, note_sur_20: float | None) -> float | None:
+    """Store or clear the automatic (OCaml or C) test grade for one student in session state."""
     note_key = get_tests_note_key(tp_name, student_name)
     if note_sur_20 is None:
         st.session_state.pop(note_key, None)
         return None
-
     normalized_note = float(note_sur_20)
     st.session_state[note_key] = normalized_note
     return normalized_note
 
 
-def render_ocaml_tests_note_metric(metric_container, note_sur_20: float | None) -> None:
+def render_tests_note_metric(metric_container, note_sur_20: float | None) -> None:
     """Render the automatic OCaml test grade metric consistently across the dashboard."""
     metric_container.metric(
         "**Note aux tests automatiques**",
@@ -2208,7 +2219,7 @@ def render_submissions_mode(tp_name: str) -> None:
     col_total.metric("**Points obtenus**", f"{total_points} / {total_points_bareme}")
     col_note.metric("**Note par lecture des rendus**", f"{note_sur_20}/20")
     top_tests_note_metric = col_tests_note.empty()
-    render_ocaml_tests_note_metric(top_tests_note_metric, tests_note_sur_20)
+    render_tests_note_metric(top_tests_note_metric, tests_note_sur_20)
 
     subject_col, grading_col, student_col = st.columns((0.7, 0.3, 0.8), gap="small")
 
@@ -2530,6 +2541,8 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                         if artifact_path_json.exists():
                             json_payload = load_json_object(artifact_path_json)
                             if json_payload is None:
+                                set_tests_note_sur_20(tp_name, selected_student_name, None)
+                                render_tests_note_metric(top_tests_note_metric, None)
                                 st.code(
                                     read_text_file(str(artifact_path_json)),
                                     language="json",
@@ -2538,9 +2551,31 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                                     height=520,
                                 )
                             else:
+                                if isinstance(json_payload, dict):
+                                    json_payload_dict = cast(dict[str, object], json_payload)
+                                    passed = json_payload_dict.get("passed")
+                                    failed = json_payload_dict.get("failed")
+                                    errored = json_payload_dict.get("errored")
+                                    skipped = json_payload_dict.get("skipped")
+                                    c_tests_note_sur_20 = set_tests_note_sur_20(
+                                        tp_name,
+                                        selected_student_name,
+                                        compute_criterion_tests_note_sur_20(passed, failed, errored),
+                                    )
+                                    render_tests_note_metric(top_tests_note_metric, c_tests_note_sur_20)
+                                    render_tests_note_metric(st, c_tests_note_sur_20)
+                                    st.caption(
+                                        f"Résumé des tests C / Criterion : {passed} succès, {failed} échec{'s' if int(str(failed)) > 0 else ''}, {errored} erreur{'s' if int(str(errored)) > 0 else ''}, {skipped} ignoré{'s' if int(str(skipped)) > 1 else ''}."
+                                    )
+                                else:
+                                    set_tests_note_sur_20(tp_name, selected_student_name, None)
+                                    render_tests_note_metric(top_tests_note_metric, None)
                                 st.json(json_payload)
                         else:
+                            set_tests_note_sur_20(tp_name, selected_student_name, None)
+                            render_tests_note_metric(top_tests_note_metric, None)
                             st.warning("Aucune sortie JSON exploitable n'a été produite par les tests Criterion.")
+                    
     else:
         compiled_exe_path = get_ocaml_compiled_exe_path(tp_name, selected_student_name or "")
         ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Interpréter dans la safebox", "C - Exécuter dans la safebox", "D - Tests complets"])
@@ -2638,8 +2673,8 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                     if artifact_path_json and artifact_path_json.exists():
                         json_payload = load_json_object(artifact_path_json)
                         if json_payload is None:
-                            set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                            render_ocaml_tests_note_metric(top_tests_note_metric, None)
+                            set_tests_note_sur_20(tp_name, selected_student_name, None)
+                            render_tests_note_metric(top_tests_note_metric, None)
                             st.error(
                                 f"Le fichier JSON/HTML {artifact_path_json.name} n'a pas pu être lu correctement."
                             )
@@ -2651,24 +2686,24 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                                 success = json_payload_dict.get("success")
                                 failures = json_payload_dict.get("failures")
                                 time = json_payload_dict.get("time")
-                                ocaml_tests_note_sur_20 = set_ocaml_tests_note_sur_20(
+                                ocaml_tests_note_sur_20 = set_tests_note_sur_20(
                                     tp_name,
                                     selected_student_name,
                                     compute_ocaml_tests_note_sur_20(success, failures),
                                 )
 
-                                render_ocaml_tests_note_metric(top_tests_note_metric, ocaml_tests_note_sur_20)
-                                render_ocaml_tests_note_metric(st, ocaml_tests_note_sur_20)
+                                render_tests_note_metric(top_tests_note_metric, ocaml_tests_note_sur_20)
+                                render_tests_note_metric(st, ocaml_tests_note_sur_20)
                                 st.caption(
                                     f"Résumé des tests OCaml : {success} succès, {failures} échec{'s' if int(str(failures)) > 0 else ''}, temps d'exécution {time}s."
                                 )
                             else:
-                                set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                                render_ocaml_tests_note_metric(top_tests_note_metric, None)
+                                set_tests_note_sur_20(tp_name, selected_student_name, None)
+                                render_tests_note_metric(top_tests_note_metric, None)
                                 st.warning("Le contenu JSON des tests n'a pas le format attendu.")
                     else:
-                        set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                        render_ocaml_tests_note_metric(top_tests_note_metric, None)
+                        set_tests_note_sur_20(tp_name, selected_student_name, None)
+                        render_tests_note_metric(top_tests_note_metric, None)
                         st.warning("Aucune sortie JSON exploitable n'a été produite par les tests Dune.")
                     # HTML, by default
                     # else:
