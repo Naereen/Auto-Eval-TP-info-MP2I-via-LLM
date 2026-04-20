@@ -1832,11 +1832,11 @@ def main() -> None:
     if DISPLAY_LOGO_LYCEE:
         # st.sidebar.image(str(ROOT_DIR / "logo.png"), width=120)
         st.sidebar.image(str(ROOT_DIR / "logo.jpeg"), width=120)
-    
+
     st.sidebar.caption("Développé pour mes usages personnels, pour la MP2I au Lycée Kléber.")
     full_sha, short_sha, modification_date = get_current_git_commit()
     if full_sha and short_sha and modification_date:
         st.sidebar.caption(f"[Version git {short_sha}, modifié {modification_date}]({REPOSITORY_URL}/commit/{full_sha})")
-    
+
 if __name__ == "__main__":
     main()

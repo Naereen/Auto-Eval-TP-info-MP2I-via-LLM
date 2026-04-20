@@ -133,13 +133,13 @@ let valeur_point ((v, c) : carte) : int =
 type point2D = float * float ;; (* *)
 
 type sous_ensemble_2D =
-  | Zero              (* singleton {(0,0)} *)
+  | Zero2D              (* singleton {(0,0)} *)
   | Droite of point2D (* vecteur directeur de la droite *)
   | Plan              (* le plan R² entier *)
 ;;
 
 (* 1. Exemples de valeurs *)
-let zero = Zero ;;
+let zero = Zero2D ;;
 let plan = Plan ;;
 let axe_x = Droite (1., 0.) ;;              (* *)
 let axe_moins_x = Droite (-1., 0.) ;;       (* *)
@@ -149,26 +149,26 @@ let premiere_bissectrice = Droite (1., 1.) ;;
 (* 2. Intersection de deux sous-ensembles du plan *)
 let inter2D e1 e2 =
   match e1, e2 with
-  | Zero, _ | _, Zero -> Zero
+  | Zero2D, _ | _, Zero2D -> Zero2D
   | Plan, e | e, Plan -> e
   | Droite (x1, y1), Droite (x2, y2) ->
       (* Le déterminant permet de tester la colinéarité des vecteurs directeurs *)
       if x1 *. y2 -. x2 *. y1 = 0. then Droite (x1, y1)
-      else Zero
+      else Zero2D
 ;;
 
 (* 3. Tests de l'intersection *)
 let () =
   assert( inter2D axe_x axe_moins_x = axe_x ); (* *)
-  assert( inter2D axe_x axe_y = Zero );
+  assert( inter2D axe_x axe_y = Zero2D );
   assert( inter2D plan axe_x = axe_x );
-  assert( inter2D zero axe_y = Zero )
+  assert( inter2D zero axe_y = Zero2D )
 ;;
 
 (* 4. Test d'appartenance d'un point à un ensemble *)
 let appartient (ensemble : sous_ensemble_2D) ((px, py) : point2D) : bool =
   match ensemble with
-  | Zero -> px = 0. && py = 0.  (* Seul le point (0,0) appartient à Zero *)
+  | Zero2D -> px = 0. && py = 0.  (* Seul le point (0,0) appartient à Zero2D *)
   | Plan -> true                (* Tous les points appartiennent à Plan *)
   | Droite (dx, dy) ->
       (* On réutilise l'astuce de la question 2 : on vérifie si

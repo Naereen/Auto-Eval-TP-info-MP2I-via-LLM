@@ -209,3 +209,15 @@ __marimo__/
 # GNU Nano
 *~
 .*.swp
+
+# Sub-git folders
+*.git/
+
+# OCaml and C compilation temporary files
+*.cma
+*.cmxa
+*.cmo
+*.cmi
+*.o
+*.exe
+*.out

@@ -4,3 +4,4 @@
 *.c
 *.ml
 *.tex
+_build/
