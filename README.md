@@ -47,8 +47,8 @@ Le mode Documentation permet de :
 - préciser où sont sauvegardés `bareme.json` et `notes.json` ;
 - résumer la place des fonctionnalités d'assistance par IA dans le flux de travail.
 
-![documentation-screenshotsdocumentation-mode-0-documentation-intégrée-1.png](documentation-screenshotsdocumentation-mode-0-documentation-intégrée-1.png)
-![documentation-screenshotsdocumentation-mode-0-documentation-intégrée-2.png](documentation-screenshotsdocumentation-mode-0-documentation-intégrée-2.png)
+![documentation-mode-0-documentation-intégrée-1.png](./documentation-screenshots/documentation-mode-0-documentation-intégrée-1.png)
+![documentation-mode-0-documentation-intégrée-2.png](./documentation-screenshots/documentation-mode-0-documentation-intégrée-2.png)
 
 ### Mode `1 - Barème`
 
