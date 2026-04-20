@@ -1,4 +1,6 @@
 (test
  (name test_code_rendu)
  (modules test_code_rendu code_rendu)
- (libraries alcotest qcheck qcheck-alcotest))
+ (libraries alcotest qcheck qcheck-alcotest)
+ (flags :standard -w -33-32-26)
+)
