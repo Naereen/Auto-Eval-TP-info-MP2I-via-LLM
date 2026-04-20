@@ -60,11 +60,13 @@ DEFAULT_QUESTION_POINTS: Final[int] = 5
 APP_MODES: Final[tuple[str, ...]] = (
     "0 - Documentation",
     "1 - Barème",
-    "2 - Génération automatisée de tests OCaml",
+    "2 - Génération IA de tests OCaml",
     "3 - Évaluation des rendus",
     "4 - Vue de la classe par TP",
     "5 - Progression annuelle individuelle",
 )
+
+SYSTEM_PROMPT = "Tu es une IA utile et extrêmement efficace, experte en informatique en français. Tu aides un professeur d'informatique en classes préparatoires CPGE, filière MP2I, en France."
 
 
 # Typed payloads make the persisted JSON structures easier to reason about.
@@ -425,6 +427,11 @@ def get_ocaml_test_generation_llm_response_key(tp_name: str) -> str:
     return f"ocaml_tests_llm_response::{tp_name}"
 
 
+def get_ocaml_test_overwrite_authorization_key(tp_name: str) -> str:
+    """Return the session key used to unlock overwriting an existing OCaml test suite."""
+    return f"ocaml_tests_allow_overwrite::{tp_name}"
+
+
 def ocaml_test_suite_is_present(tp_name: str) -> bool:
     """Return whether a generated OCaml test suite already exists for one TP."""
     return get_ocaml_test_source_path(tp_name).exists()
@@ -480,6 +487,8 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
     tests_dir = get_ocaml_tests_dir(tp_name)
     test_source_path = get_ocaml_test_source_path(tp_name)
     test_suite_exists = ocaml_test_suite_is_present(tp_name)
+    overwrite_authorization_key = get_ocaml_test_overwrite_authorization_key(tp_name)
+    overwrite_is_authorized = bool(st.session_state.get(overwrite_authorization_key, False))
 
     st.title(f"Génération automatisée de tests OCaml - `{tp_name}`")
     st.caption(
@@ -489,20 +498,44 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
     subject_col, tests_col = st.columns((1.1, 1), gap="large")
 
     with subject_col:
-        render_subject_panel(tp_name)
+        render_subject_panel(tp_name, height=1540)
 
     with tests_col:
         st.subheader("Banc de tests OCaml")
-        st.write(
-            "Ce mode prépare le dossier `dune_tests/` du TP courant et ne réécrit le fichier de tests qu'en l'absence d'un fichier déjà présent."
-        )
+        if test_suite_exists:
+            st.write(
+                "Ce mode prépare le dossier `dune_tests/` du TP courant. Un fichier de tests existe déjà ; son écrasement n'est possible qu'après déverrouillage explicite puis confirmation de génération."
+            )
+        else:
+            st.write(
+                "Ce mode prépare le dossier `dune_tests/` du TP courant et génère le fichier `test_code_rendu.ml` lorsqu'il est absent."
+            )
 
         st.caption(f"Dossier cible : `{tests_dir}`")
         if test_suite_exists:
             st.success("Un fichier `test_code_rendu.ml` existe déjà pour ce TP.")
-            st.caption(
-                "La génération automatique est donc désactivée pour éviter d'écraser un banc de tests déjà préparé à la main."
-            )
+            if overwrite_is_authorized:
+                st.warning(
+                    "L'écrasement du fichier existant a été explicitement autorisé pour ce TP. La génération ci-dessous remplacera `dune_tests/test_code_rendu.ml`."
+                )
+                if st.button(
+                    "Verrouiller à nouveau la protection contre l'écrasement",
+                    width="stretch",
+                    help="Réactive la protection et masque le bouton de génération destructive.",
+                ):
+                    st.session_state[overwrite_authorization_key] = False
+                    st.rerun()
+            else:
+                st.caption(
+                    "La protection contre l'écrasement est active. Déverrouillez-la explicitement si vous souhaitez remplacer le banc de tests actuel par une nouvelle génération IA."
+                )
+                if st.button(
+                    "⚠️ Autoriser l'écrasement du fichier de tests existant",
+                    width="stretch",
+                    help="Déverrouille le second bouton de génération pour ce TP seulement, sans lancer encore la génération.",
+                ):
+                    st.session_state[overwrite_authorization_key] = True
+                    st.rerun()
             existing_files = []
             if tests_dir.exists():
                 for path in sorted(tests_dir.iterdir(), key=lambda item: item.name.lower()):
@@ -511,8 +544,8 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
                 st.dataframe(existing_files, width="stretch", hide_index=True)
             if test_source_path.exists():
                 with st.expander("Afficher le fichier de tests existant"):
-                    st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
-            return
+                    with st.container(height=520):
+                        st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
 
         missing_files = [filename for filename in ("dune", "dune-project", "test_code_rendu.ml") if not (tests_dir / filename).exists()]
         if missing_files:
@@ -527,25 +560,44 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
             "Analyse le sujet PDF, ses sources et le barème courant pour proposer un fichier `test_code_rendu.ml` Dune/Alcotest/QCheck. "
             f"{help_credits_llm}"
         )
-        if st.button("✨ Générer le fichier de tests OCaml par IA ? ✨", width='stretch', help=generate_button_help):
+        generation_is_unlocked = (not test_suite_exists) or overwrite_is_authorized
+        if test_suite_exists and not generation_is_unlocked:
+            st.info(
+                "Le bouton de génération reste masqué tant que l'autorisation explicite d'écrasement n'a pas été donnée."
+            )
+
+        if generation_is_unlocked and st.button(
+            "✨ Générer le fichier de tests OCaml par IA ? ✨",
+            width="stretch",
+            help=generate_button_help,
+        ):
+            overwrite_instruction = (
+                "- tu peux remplacer le fichier existant `test_code_rendu.ml` par une nouvelle version complète et cohérente ;"
+                if test_suite_exists
+                else "- crée le fichier `test_code_rendu.ml` attendu dans le dossier de tests ;"
+            )
             prompt = f"""
-            Analyse ce sujet de Travaux Pratiques d'Informatique en MP2I.
+Analyse ce sujet de Travaux Pratiques d'Informatique en MP2I.
 
-            Je veux que tu génères le fichier OCaml complet `test_code_rendu.ml` pour un banc de tests Dune.
+Je te donne :
+- le sujet du TP, avec ses sources LaTeX ou Markdown,
+- le barème JSON courant du sujet.
 
-            Contraintes impératives :
-            - ne renvoie QUE le code source OCaml final, sans explication, sans Markdown, sans bloc de code ;
-            - le fichier doit être compatible avec `dune`, `alcotest`, `qcheck` et `qcheck-alcotest` ;
-            - le module principal testé s'appelle `Code_rendu` ;
-            - écris à la fois des tests unitaires Alcotest et des tests de propriétés QCheck quand c'est pertinent ;
-            - privilégie des helpers lisibles, des assertions explicites et des générateurs QCheck robustes ;
-            - si l'API exacte n'est pas entièrement déductible, construis des tests génériques utiles à partir du sujet et des exemples présents ;
-            - évite d'écraser des fichiers existants : on ne génère que `test_code_rendu.ml`.
+Je veux que tu génères le fichier OCaml complet `test_code_rendu.ml` pour un banc de tests dans le contexte d'un projet `Dune`.
 
-            Le résultat doit constituer un banc de tests sérieux, pédagogique et directement exploitable.
+Contraintes impératives :
+- ne renvoie QUE le code source OCaml final, sans verbiage inutile ni explication, sans Markdown, sans bloc de code ;
+- le fichier doit être compatible avec le framework de test composé de `dune`, `alcotest` plus `qcheck`, et `qcheck-alcotest` ;
+- le module principal à tester s'appelle `Code_rendu` et sera importé comme `module CR = Code_rendu` ;
+- écris à la fois des tests unitaires (avec Alcotest) et des tests de propriétés (avec QCheck), quand c'est pertinent ;
+- privilégie des helpers lisibles, des assertions explicites et des générateurs QCheck robustes ;
+- si l'API exacte n'est pas entièrement déductible, construis des tests génériques utiles à partir du sujet et des exemples présents ;
+{overwrite_instruction}
+
+Le résultat doit constituer un banc de tests sérieux, vraiment très complet, pédagogique et directement exploitable, sans erreur de compilation ou autre problème.
             """
 
-            system_prompt = "Tu es une IA utile et efficace, experte en informatique en français. Tu aides un professeur d'informatique en classes préparatoires CPGE, filière MP2I, en France."
+            system_prompt = SYSTEM_PROMPT
 
             json_paths: list[Path] = []
             if bareme_path.exists():
@@ -558,7 +610,7 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
                 ]
 
             source_paths: list[Path] = list(tex_files) + list(markdown_files)
-            with st.spinner("Génération du fichier de tests par l'IA en cours..."):
+            with st.spinner("Génération du fichier de tests en cours grâce à l'IA..."):
                 response = response_from_llm(
                     prompt=prompt,
                     system_prompt=system_prompt,
@@ -575,6 +627,7 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
                 st.error("La réponse de l'IA n'a pas pu être convertie en fichier de tests OCaml exploitable.")
             else:
                 test_path = save_generated_ocaml_tests(tp_name, generated_tests)
+                st.session_state[overwrite_authorization_key] = False
                 st.success(f"Le fichier de tests a été généré et sauvegardé dans `{test_path.name}`.")
                 st.rerun()
 
@@ -586,7 +639,8 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
 
         if test_source_path.exists():
             with st.expander("Prévisualiser le fichier `test_code_rendu.ml` actuel"):
-                st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
+                with st.container(height=520):
+                    st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
 
         if tests_dir.exists():
             st.subheader("Contenu actuel du dossier `dune_tests/`")
@@ -1484,7 +1538,7 @@ def detect_language(path: Path) -> str:
     return "text"
 
 
-def render_subject_panel(tp_name: str) -> None:
+def render_subject_panel(tp_name: str, height=820) -> None:
     """Render the subject PDF and LaTeX metadata for the selected practical session."""
     subject_pdf = find_subject_pdf(tp_name)
     tex_files = find_subject_tex_files(tp_name)
@@ -1492,7 +1546,7 @@ def render_subject_panel(tp_name: str) -> None:
 
     st.subheader("Sujet du TP")
     if subject_pdf is not None:
-        render_pdf(subject_pdf, height=820)
+        render_pdf(subject_pdf, height=height)
         st.caption(f"PDF détecté : `{subject_pdf.name}`")
     else:
         st.warning("Aucun PDF de sujet n'a été trouvé pour ce TP.")
@@ -1554,23 +1608,25 @@ def render_bareme_mode(tp_name: str) -> None:
         if st.button("✨ Proposer un barème automatique par IA ? ✨", width='stretch', help=f"Analyse le sujet PDF et ses sources LaTeX et Markdown, pour proposer un barème qui pourra être sauvegardé dans un fichier local. {help_credits_llm}"):
             # On construit le prompt
             prompt = """
-            Analyse ce sujet de Travaux Pratiques  d'Informatique, je t'ai joint le sujet en PDF et ses sources LaTeX et Markdown.
-            Identifie les exercices et questions.
+Analyse ce sujet de Travaux Pratiques d'Informatique, je t'ai joint le sujet du TP, avec ses sources LaTeX ou Markdown.
+Tu vas identifier les exercices et questions.
 
-            Propose un barème avec chaque questions entre 1 et 10 points (1 point si question très facile, 10 points si question plutôt dure), en respectant la difficulté relative des notions (ex: récursivité terminale en OCaml vs manipulation de pointeurs en C).
+**Propose un barème, avec chaque questions entre 1 et 10 points (1 point si question très facile, 10 points si question plutôt dure), en respectant la difficulté relative des notions (ex: récursivité terminale en OCaml vs manipulation de pointeurs en C).**
 
-            Renvoie uniquement un JSON sous cette forme :
+Renvoie uniquement un JSON sous cette forme (par exemple) :
 
-            { "format_version": 1, "tp_name": "37-graphes-euleriens", "question_count": 15, "total_points": 100, "questions": [ { "index": 1, "label": "Question XXXVII.1.1", "points": 2 }, { "index": 2, "label": "Question XXXVII.1.2", "points": 7 }, { "index": 3, "label": "Question XXXVII.2.1", "points": 5 }, { "index": 2, "label": "Question XXXVII.2.2", "points": 10 }, ... { "index": 15, "label": "Question XXXVII.9.1", "points": 10 } ] }
+```json
+{ "format_version": 1, "tp_name": "37-graphes-euleriens", "question_count": NOMBRE, "total_points": TOTAL, "questions": [ { "index": 1, "label": "Question XXXVII.1.1", "points": 2 }, { "index": 2, "label": "Question XXXVII.1.2", "points": 7 }, { "index": 3, "label": "Question XXXVII.2.1", "points": 5 }, { "index": 2, "label": "Question XXXVII.2.2", "points": 10 }, ... { "index": 15, "label": "Question XXXVII.9.1", "points": 10 } ] }
+```
             """
 
-            system_prompt = "Tu es une IA utile et efficace, experte en informatique en français. Tu vas m'aider, moi je suis professeur d'informatique en classes préparatoires CPGE, filière MP2I, en France."
+            system_prompt = SYSTEM_PROMPT
 
             subject_pdf = find_subject_pdf(tp_name)
             tex_files = find_subject_tex_files(tp_name)
             markdown_files = find_subject_markdown_files(tp_name)
 
-            with st.spinner("Requête à l'IA en cours..."):
+            with st.spinner("Génération du barème en cours grâce à l'IA..."):
                 response = response_from_llm(
                     prompt=prompt,
                     system_prompt=system_prompt,
@@ -1746,25 +1802,27 @@ def render_submissions_mode(tp_name: str) -> None:
                     help=f"Analyse le sujet, le barème sauvegardé, le code rendu et le compte-rendu pour proposer une notation question par question. {help_credits_llm}",
                 ):
                     prompt = f"""
-                    Analyse ce rendu de Travaux Pratiques d'Informatique.
+Analyse ce rendu de Travaux Pratiques d'Informatique.
 
-                    Je te donne :
-                    - le sujet du TP en PDF et ses sources LaTeX,
-                    - le barème JSON courant du sujet,
-                    - le code rendu par l'étudiant,
-                    - le compte-rendu de l'étudiant en Markdown, ou en PDF si le Markdown n'est pas disponible.
+Je te donne :
+- le sujet du TP en PDF et ses sources LaTeX,
+- le barème JSON courant du sujet,
+- le code rendu par l'étudiant,
+- le compte-rendu de l'étudiant en Markdown, ou en PDF si le Markdown n'est pas disponible.
 
-                    Évalue chaque question du barème. Attribue un nombre entier de points entre 0 et le maximum de la question.
-                    Calcule ensuite le total des points obtenus et la note sur 20 correspondante.
+Évalue chaque question du barème. Attribue un nombre entier de points entre 0 et le maximum de la question.
+Calcule ensuite le total des points obtenus et la note sur 20 correspondante.
 
-                    Réponds uniquement avec un JSON de cette forme (par exemple) :
+Réponds uniquement avec un JSON de cette forme (par exemple) :
 
-                    {{ "format_version": 1, "tp_name": "{tp_name}", "student_name": "{selected_student_name}", "question_count": {len(bareme_questions)}, "total_points_awarded": 57, "total_points_bareme": {sum(get_question_points(question) for question in bareme_questions)}, "note_sur_20": 12.67, "questions": [ {{ "index": 1, "label": "Question 1", "max_points": 10, "points_awarded": 10 }}, ..., {{ "index": {len(bareme_questions)}, "label": "Question {len(bareme_questions)}", "max_points": 10, "points_awarded": 9 }} ] }}
+```json
+{{ "format_version": 1, "tp_name": "{tp_name}", "student_name": "{selected_student_name}", "question_count": {len(bareme_questions)}, "total_points_awarded": 57, "total_points_bareme": {sum(get_question_points(question) for question in bareme_questions)}, "note_sur_20": 12.67, "questions": [ {{ "index": 1, "label": "Question 1", "max_points": 10, "points_awarded": 10 }}, ..., {{ "index": {len(bareme_questions)}, "label": "Question {len(bareme_questions)}", "max_points": 10, "points_awarded": 9 }} ] }}
+```
 
-                    Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
+Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                     """
 
-                    system_prompt = "Tu es une IA utile et efficace, experte en informatique en français. Tu vas m'aider, moi je suis professeur d'informatique en classes préparatoires CPGE, filière MP2I, en France."
+                    system_prompt = SYSTEM_PROMPT
 
                     subject_pdf = find_subject_pdf(tp_name)
                     tex_files = find_subject_tex_files(tp_name)
@@ -1792,7 +1850,7 @@ def render_submissions_mode(tp_name: str) -> None:
                             "Barème JSON courant :\n" + json.dumps(bareme_data, ensure_ascii=False, indent=2)
                         ]
 
-                    with st.spinner("Requête à l'IA en cours..."):
+                    with st.spinner("Génération de l'évaluation de ce rendu de TP, en cours grâce à l'IA ..."):
                         response = response_from_llm(
                             prompt=prompt,
                             system_prompt=system_prompt,
@@ -2439,7 +2497,7 @@ def main() -> None:
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut rédiger son barème", tp_names)
         render_bareme_mode(selected_tp)
 
-    elif selected_mode == "2 - Génération automatisée de tests OCaml":
+    elif selected_mode == "2 - Génération IA de tests OCaml":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut générer les tests OCaml", tp_names)
         render_ocaml_tests_generation_mode(selected_tp)
     elif selected_mode == "3 - Évaluation des rendus":
