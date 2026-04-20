@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
+#-*- coding: utf-8 -*-
+#
+# Script de test d'appel à l'API de ILAAS.fr
+# Cf. https://www.ilaas.fr/services-inference/
+#
+
 
 from pprint import pprint
-import json
+# import json
 from pathlib import Path
 import time
 import requests
@@ -49,7 +55,7 @@ default_system_prompt = "Tu es une IA utile, tu réponds rapidement et sans bava
 
 
 # Fonction de demande de complétion
-def response_from_ilaas_llm(prompt=example_prompt, system_prompt=default_system_prompt, additionnal_messages=None, model_name=default_model_name):
+def response_from_llm(prompt=example_prompt, system_prompt=default_system_prompt, additionnal_messages=None, model_name=default_model_name):
     if not prompt:
         raise ValueError
 
@@ -83,23 +89,22 @@ def response_from_ilaas_llm(prompt=example_prompt, system_prompt=default_system_
 
     start_timer = time.time()
 
-    response = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload)
-    result = response.json()
+    response = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload).json()
 
     end_timer = time.time()
 
-    print("Reponse:")
-    pprint(result)
+    print("Response:")
+    pprint(response)
 
     delta_timer = end_timer - start_timer
     print(f"Time for this response: {delta_timer:.2f} seconds")
 
     # Affichage de la réponse
-    response = result['choices'][0]['message']['content']
-    print(response)
+    result = response['choices'][0]['message']['content']
+    print(result)
 
-    return response, result, delta_timer
+    return result, response, delta_timer
 
 
 if __name__ == "__main__":
-    response_from_ilaas_llm()
+    response_from_llm()

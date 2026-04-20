@@ -17,6 +17,9 @@ from pathlib import Path
 import altair as alt
 import streamlit as st
 
+# # Local module
+# from gemini_requests import response_from_llm
+
 
 ROOT_DIR = Path(__file__).resolve().parent
 SUBJECTS_DIR = ROOT_DIR / "sujets-de-travaux-pratiques"
