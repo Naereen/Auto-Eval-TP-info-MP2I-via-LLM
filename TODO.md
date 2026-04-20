@@ -21,7 +21,9 @@ ocamlopt -ccopt -static -o /tmp/test_ocaml.exe ./code_rendu.ml
 nsjail --config ./nsjail_config.cfg -- /tmp/test_ocaml.exe
 ```
 
-TODO: faire aussi la compilation derrière la "safe sandbox" de nsjail ?
+- [ ] faire aussi la compilation `ocamlopt` derrière la "safe sandbox" de nsjail ?
+- [ ] faire aussi la compilation `ocamlc` derrière la "safe sandbox" de nsjail ?
+- [ ] faire aussi l'interprértation (terminal `ocaml`) derrière la "safe sandbox" de nsjail ?
 
 #### Pour le C ?
 
@@ -30,15 +32,15 @@ gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_r
 nsjail --config ./nsjail_config.cfg -- /tmp/test_c.exe
 ```
 
-TODO: faire aussi la compilation derrière la "safe sandbox" de nsjail ?
+TODO: faire aussi la compilation `gcc` derrière la "safe sandbox" de nsjail ?
 
 ### 2) Supporter des fichiers de tests, fournis préalablement et écrits à la main (par AlcoTesT/QCheck en OCaml, et AFL++ et Criterion en C)
 
 #### Pour OCaml ?
 
-Un premier exemple est maintenant présent pour `rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/`, avec `dune`, `alcotest`, `qcheck` et `qcheck-alcotest`.
+Un premier exemple est maintenant présent pour `rendus-des-etudiants/03-types-polymorphes-etc-ocaml/dune_tests/`, avec `dune`, `alcotest`, `qcheck` et `qcheck-alcotest`.
 
-Le dashboard permet déjà, pour un rendu OCaml sélectionné, de compiler le fichier, de l'exécuter dans NsJail et de lancer les tests Dune préparés à la main en conservant les logs.
+Le dashboard permet déjà, pour un rendu OCaml sélectionné (un étudiant fixé), de compiler le fichier, de l'exécuter dans [NsJail](https://nsjail.dev/) (un outil de "sandbox sécurisée"), et de lancer les tests OCaml (qui fonctionnent avec Dune, Alcotest et QCheck) préparés à la main, tout en conservant et en affichant joliment les logs.
 
 - [ ] Généraliser cette infrastructure de tests OCaml aux autres rendus et autres TP.
 

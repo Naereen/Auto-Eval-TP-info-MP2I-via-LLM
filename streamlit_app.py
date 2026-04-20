@@ -54,9 +54,6 @@ OCAML_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
 OCAML_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
 OCAML_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
 
-# RUN_OCAML_DUNE_TESTS_JSON_OUTPUT: Final[bool] = False
-RUN_OCAML_DUNE_TESTS_JSON_OUTPUT: Final[bool] = True
-
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
 
@@ -500,7 +497,7 @@ def compute_ocaml_tests_note_sur_20(successes: object, failures: object) -> floa
 
 
 def run_ocaml_dune_tests(
-    tp_name: str, code_path: Path, json_mode: bool = RUN_OCAML_DUNE_TESTS_JSON_OUTPUT
+    tp_name: str, code_path: Path, json_mode: bool
 ) -> tuple[int, Path, Path, str]:
     """Copy one OCaml submission into the shared dune tests and run them."""
     tests_dir = get_ocaml_tests_dir(tp_name)
@@ -521,6 +518,7 @@ def run_ocaml_dune_tests(
         "./test_code_rendu.exe",
         "--",
         "--show-errors",
+        "--compact",
     ]
     if json_mode:
         command.append("--color")
@@ -1538,9 +1536,9 @@ def render_submissions_mode(tp_name: str) -> None:
     col_rendus.metric("**Nombre de rendus détectés**", len(student_dirs))
     col_etudiant.metric("**Étudiant sélectionné**", f"**{selected_student_name}**" or "aucun")
     col_total.metric("**Points obtenus**", f"{total_points} / {total_points_bareme}")
-    col_note.metric("**Note**", f"{note_sur_20}/20")
+    col_note.metric("**Note par lecture des rendus**", f"{note_sur_20}/20")
     col_tests_note.metric(
-        "**Note tests**",
+        "**Note aux tests automatiques**",
         f"{ocaml_tests_note_sur_20}/20" if ocaml_tests_note_sur_20 is not None else "—",
     )
 
@@ -1823,49 +1821,52 @@ def render_submissions_mode(tp_name: str) -> None:
 
         if st.button("Lancer les tests (Dune)", key=test_button_key, type="primary", width='stretch'):
             exit_code, log_path, artifact_path, output = run_ocaml_dune_tests(
-                tp_name, code_path, json_mode=RUN_OCAML_DUNE_TESTS_JSON_OUTPUT
+                tp_name, code_path, json_mode=False
             )
             if exit_code == 0:
                 st.success(f"Tests Dune terminés entièrement avec succès. Le rendu a été généré dans `{artifact_path.name}`.")
             else:
                 st.success(f"Tests Dune terminés avec une erreur, et le code de retour {exit_code}. Le rendu a-t-il été généré dans `{artifact_path.name}` ?")
 
+            # TODO: je veux aussi afficher le JSON ?
+            exit_code_json, log_path_json, artifact_path_json, output_json = run_ocaml_dune_tests(
+                tp_name, code_path, json_mode=True
+            )
+
             st.markdown("**Sortie de cette commande Bash (log)**")
             # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
 
             test_html_tab, test_log_tab = st.tabs(["Jolie sortie", "Log brut"])
             with test_html_tab:
-                if RUN_OCAML_DUNE_TESTS_JSON_OUTPUT:
-                    if artifact_path and artifact_path.exists():
-                        json_payload = load_json_object(artifact_path)
-                        if json_payload is None:
-                            st.error(
-                                f"Le fichier JSON {artifact_path.name} n'a pas pu être lu correctement."
-                            )
-                            st.code(read_text_file(str(artifact_path)), language="json", line_numbers=True, wrap_lines=True, height=520)
-                        else:
-                            st.json(json_payload)
-                            if isinstance(json_payload, dict):
-                                json_payload_dict = cast(dict[str, object], json_payload)
-                                success = json_payload_dict.get("success")
-                                failures = json_payload_dict.get("failures")
-                                time = json_payload_dict.get("time")
-                                ocaml_tests_note_sur_20 = compute_ocaml_tests_note_sur_20(success, failures)
-                                st.session_state[ocaml_tests_note_key] = ocaml_tests_note_sur_20
-
-                                st.metric("**Note tests**", f"{ocaml_tests_note_sur_20}/20")
-                                st.caption(
-                                    f"Résumé des tests Dune : {success} succès, {failures} échec(s), temps d'exécution {time}s."
-                                )
-                            else:
-                                st.warning("Le contenu JSON des tests n'a pas le format attendu.")
+                if artifact_path_json and artifact_path_json.exists():
+                    json_payload = load_json_object(artifact_path_json)
+                    if json_payload is None:
+                        st.error(
+                            f"Le fichier JSON/HTML {artifact_path_json.name} n'a pas pu être lu correctement."
+                        )
+                        st.code(read_text_file(str(artifact_path)), language="json", line_numbers=True, wrap_lines=True, height=520)
                     else:
-                        st.warning("Aucun rendu JSON des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.")
-                else:  # HTML, by default
-                    render_html_log(
-                        artifact_path,
-                        "Aucun rendu HTML des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
-                    )
+                        # st.json(json_payload)
+                        if isinstance(json_payload, dict):
+                            json_payload_dict = cast(dict[str, object], json_payload)
+                            success = json_payload_dict.get("success")
+                            failures = json_payload_dict.get("failures")
+                            time = json_payload_dict.get("time")
+                            ocaml_tests_note_sur_20 = compute_ocaml_tests_note_sur_20(success, failures)
+                            st.session_state[ocaml_tests_note_key] = ocaml_tests_note_sur_20
+
+                            st.metric("**Note aux tests automatiques**", f"{ocaml_tests_note_sur_20}/20")
+                            st.caption(
+                                f"Résumé des tests OCaml : {success} succès, {failures} échec{'s' if failures > 0 else ''}, temps d'exécution {time}s."
+                            )
+                        else:
+                            st.warning("Le contenu JSON des tests n'a pas le format attendu.")
+                # HTML, by default
+                # else:
+                render_html_log(
+                    artifact_path,
+                    "Aucun rendu HTML des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                )
             with test_log_tab:
                 render_code_log(
                     log_path,
