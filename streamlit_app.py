@@ -31,21 +31,31 @@ ROOT_DIR: Final[Path] = Path(__file__).resolve().parent
 SUBJECTS_DIR: Final[Path] = ROOT_DIR / "sujets-de-travaux-pratiques"
 SUBMISSIONS_DIR: Final[Path] = ROOT_DIR / "rendus-des-etudiants"
 REPOSITORY_URL: Final[str] = "https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM"
-DISPLAY_LOGO_LYCEE: bool = True
+
+# LOGO_LYCEE: Final[str] = "logo.png"
+LOGO_LYCEE: Final[str] = "logo.jpeg"
+
+# Configure the OCaml $PATH cleverly '/home/lilian/.opam/4.14.1/bin/ocaml'
+# TODO: be independant of the installed version of OCaml and Opam...
+OCAML_INTERPRETER_PATH: Final[str] = Path.home() / '.opam' / '4.14.1' / 'bin' / 'ocaml'
 
 # Preferred filenames are checked first before falling back to broader glob searches.
 CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "code_rendu.ml")
 REPORT_PDF_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.pdf", "compte_rendu.pdf")
 REPORT_MD_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.md", "compte_rendu.md")
+
 BAREME_FILENAME: Final[str] = "bareme.json"
 NOTES_FILENAME: Final[str] = "notes.json"
 DUNE_TESTS_DIR: Final[str] = "dune_tests"
 OCAML_COMPILE_LOG_FILENAME: Final[str] = "ocamlopt_code_rendu.log"
+OCAML_INTERPRET_LOG_FILENAME: Final[str] = "ocaml_interpreter_code_rendu.log"
 OCAML_EXEC_LOG_FILENAME: Final[str] = "exec_code_rendu.log"
 OCAML_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
 OCAML_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
+
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
+
 APP_MODES: Final[tuple[str, ...]] = (
     "0 - Documentation",
     "1 - Barème",
@@ -284,13 +294,17 @@ def slugify_for_filename(value: str) -> str:
     return slug or "artifact"
 
 
-def run_command_and_capture_output(command: list[str], cwd: Path, log_path: Path, timeout=60) -> tuple[int, str]:
+def run_command_and_capture_output(command: list[str], cwd: Path, log_path: Path, input_path=None, timeout=60) -> tuple[int, str]:
     """Run one command safely, save its combined output, and return the exit code plus output."""
     try:
+        input_file = None
+        if input_path:
+            input_file = open(input_path, "r")
         completed = subprocess.run(
             command,
             cwd=cwd,
             check=False,
+            stdin=input_file,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -334,20 +348,20 @@ def render_code_log(log_path: Path, language: str, empty_message: str) -> None:
     """Render a text log in a syntax-highlighted code block."""
     log_text = load_log_text(log_path)
     if log_text:
-        st.code(log_text, language=language, line_numbers=True, height=720)
+        st.code(log_text, language=language, line_numbers=True, wrap_lines=True, height=720)
     else:
         st.info(empty_message)
 
 
 def ansi_log_to_html(log_text: str) -> str:
     """Convert an ANSI-colored log to HTML when possible, with a safe fallback."""
-    try:
-        from ansi2html import Ansi2HTMLConverter  # type: ignore[reportMissingImports]
-        converter = Ansi2HTMLConverter(inline=True)
-        return converter.convert(log_text, full=False)
-    except ImportError:
-        escaped = html_lib.escape(log_text)
-        return f"<pre style=\"white-space: pre-wrap; font-family: monospace; margin: 0;\">{escaped}</pre>"
+    # try:
+    #     from ansi2html import Ansi2HTMLConverter  # type: ignore[reportMissingImports]
+    #     converter = Ansi2HTMLConverter(inline=True)
+    #     return converter.convert(log_text, full=False)
+    # except ImportError:
+    escaped = html_lib.escape(log_text)
+    return f"<pre style=\"white-space: pre-wrap; font-family: monospace; margin: 0;\">{escaped}</pre>"
 
 
 def render_html_log(html_path: Path, empty_message: str) -> None:
@@ -368,6 +382,11 @@ def get_ocaml_tests_dir(tp_name: str) -> Path:
 def get_ocaml_compile_log_path(student_dir: Path) -> Path:
     """Return the path of the OCaml compilation log for one student render."""
     return student_dir / OCAML_COMPILE_LOG_FILENAME
+
+
+def get_ocaml_interpret_log_path(student_dir: Path) -> Path:
+    """Return the path of the OCaml interpretation log for one student render."""
+    return student_dir / OCAML_INTERPRET_LOG_FILENAME
 
 
 def get_ocaml_exec_log_path(student_dir: Path) -> Path:
@@ -392,18 +411,33 @@ def get_ocaml_compiled_exe_path(tp_name: str, student_name: str) -> Path:
 
 def compile_ocaml_submission(
     student_dir: Path, code_path: Path, compiled_exe_path: Path
-) -> tuple[int, Path, Path]:
+) -> tuple[int, Path, Path, str]:
     """Compile one OCaml submission and persist the compiler output."""
     log_path = get_ocaml_compile_log_path(student_dir)
     exit_code, output = run_command_and_capture_output(
-        ["ocamlopt", "-ccopt", "-static", "-o", str(compiled_exe_path), code_path.name],
+        ["ocamlopt", "-color", "never", "-ccopt", "-static", "-o", str(compiled_exe_path), code_path.name],
         cwd=student_dir,
         log_path=log_path,
     )
-    return exit_code, compiled_exe_path, log_path
+    return exit_code, compiled_exe_path, log_path, output
 
 
-def run_ocaml_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -> tuple[int, Path]:
+def interpret_ocaml_submission_in_nsjail(
+    student_dir: Path, code_path: Path
+) -> tuple[int, Path, str]:
+    """Interpret one OCaml submission and persist the interpreter output."""
+    log_path = get_ocaml_interpret_log_path(student_dir)
+    nsjail_config = ROOT_DIR / "nsjail_config.cfg"
+    exit_code, output = run_command_and_capture_output(
+        ["nsjail", "--config", str(nsjail_config), "--", OCAML_INTERPRETER_PATH, "-color", "never"],
+        cwd=student_dir,
+        log_path=log_path,
+        input_path=code_path,
+    )
+    return exit_code, log_path, output
+
+
+def run_ocaml_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -> tuple[int, Path, str]:
     """Run one compiled OCaml binary inside NsJail and persist the output."""
     log_path = get_ocaml_exec_log_path(student_dir)
     nsjail_config = ROOT_DIR / "nsjail_config.cfg"
@@ -412,10 +446,10 @@ def run_ocaml_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -
         cwd=student_dir,
         log_path=log_path,
     )
-    return exit_code, log_path
+    return exit_code, log_path, output
 
 
-def run_ocaml_dune_tests(tp_name: str, code_path: Path) -> tuple[int, Path, Path]:
+def run_ocaml_dune_tests(tp_name: str, code_path: Path) -> tuple[int, Path, Path, str]:
     """Copy one OCaml submission into the shared dune tests and run them."""
     tests_dir = get_ocaml_tests_dir(tp_name)
     tests_dir.mkdir(parents=True, exist_ok=True)
@@ -426,14 +460,14 @@ def run_ocaml_dune_tests(tp_name: str, code_path: Path) -> tuple[int, Path, Path
     log_path = get_ocaml_test_log_path(tp_name)
     html_path = get_ocaml_test_html_path(tp_name)
 
-    exit_code, log_text = run_command_and_capture_output(
+    exit_code, output = run_command_and_capture_output(
         ["dune", "exe", "--print-metrics", "--display=quiet", "./test_code_rendu.exe"],
         cwd=tests_dir,
         log_path=log_path,
     )
 
-    html_path.write_text(ansi_log_to_html(log_text), encoding="utf-8")
-    return exit_code, log_path, html_path
+    html_path.write_text(ansi_log_to_html(output), encoding="utf-8")
+    return exit_code, log_path, html_path, output
 
 
 def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]:
@@ -1593,7 +1627,7 @@ def render_submissions_mode(tp_name: str) -> None:
                     st.warning("Aucun fichier source rendu n'a été trouvé.")
                 else:
                     code = read_text_file(str(code_path))
-                    st.code(code, language=detect_language(code_path), line_numbers=True, height=720)
+                    st.code(code, language=detect_language(code_path), line_numbers=True, wrap_lines=True, height=720)
                     st.caption(f"Fichier affiché : {code_path.name}")
 
             with tabs[1]:
@@ -1618,7 +1652,7 @@ def render_submissions_mode(tp_name: str) -> None:
 
 
     st.divider()
-    st.subheader("Outils OCaml à la demande")
+    st.subheader("Outils d'évaluation de code OCaml semi-automatisés")
     st.caption(
         "Aucune action n'est lancée automatiquement : la compilation, l'exécution NsJail et les tests Dune ne démarrent qu'après clic explicite sur un bouton."
     )
@@ -1632,46 +1666,71 @@ def render_submissions_mode(tp_name: str) -> None:
         return
 
     compiled_exe_path = get_ocaml_compiled_exe_path(tp_name, selected_student_name or "")
-    ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Exécuter dans NsJail", "C - Tests Dune"])
+    ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Interpréter dans la safebox", "C - Exécuter dans la safebox", "D - Tests complets"])
 
     with ocaml_tools_tabs[0]:
-        st.write("Compiler le fichier OCaml rendu sans lancer le binaire.")
+        st.write("Compiler le fichier OCaml rendu, mais sans prendre encore le risque de lancer le binaire (il faut rester un peu prudent).")
         compile_button_key = f"ocaml_compile_button::{tp_name}::{selected_student_name}"
-        if st.button("Compiler le rendu OCaml", key=compile_button_key, type="primary", width='content'):
-            exit_code, compiled_exe_path, log_path = compile_ocaml_submission(selected_student_dir, code_path, compiled_exe_path)
+        if st.button("Compiler le rendu OCaml (ocamlopt)", key=compile_button_key, type="primary", width='stretch'):
+            exit_code, compiled_exe_path, log_path, output = compile_ocaml_submission(selected_student_dir, code_path, compiled_exe_path)
             if exit_code == 0:
                 st.success(f"Compilation réussie, terminée avec succès, le binaire est disponible dans {compiled_exe_path}.")
             else:
                 st.warning(f"Compilation échouée, terminée avec le code de retour {exit_code}.")
 
+            st.markdown("**Sortie de cette commande Bash (log)**")
+            # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
+
             render_code_log(
                 log_path,
-                detect_language(log_path),
+                detect_language(code_path),
                 "Aucun log de compilation n'est encore disponible. Cliquez sur le bouton de compilation pour en générer un.",
             )
 
     with ocaml_tools_tabs[1]:
+        st.write("Interpréter le fichier OCaml rendu en montrant les sorties (ligne par ligne).")
+        interpret_button_key = f"ocaml_interpret_button::{tp_name}::{selected_student_name}"
+        if st.button("Interpréter le rendu OCaml", key=interpret_button_key, type="primary", width='stretch'):
+            exit_code, log_path, output = interpret_ocaml_submission_in_nsjail(selected_student_dir, code_path)
+            if exit_code == 0:
+                st.success(f"Interprétration réussie, terminée avec succès.")
+            else:
+                st.warning(f"Interprétration échouée, terminée avec le code de retour {exit_code}.")
+
+            st.markdown("**Sortie de cette commande Bash (log)**")
+            # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
+
+            render_code_log(
+                log_path,
+                detect_language(code_path),
+                "Aucun log de compilation n'est encore disponible. Cliquez sur le bouton de compilation pour en générer un.",
+            )
+
+    with ocaml_tools_tabs[2]:
         st.write("Exécuter le binaire compilé dans une sandbox NsJail.")
         run_button_key = f"ocaml_run_button::{tp_name}::{selected_student_name}"
-        if st.button("Exécuter dans NsJail", key=run_button_key, type="primary", width='stretch'):
+        if st.button("Exécuter dans une safebox (NsJail)", key=run_button_key, type="primary", width='stretch'):
             if not compiled_exe_path.exists():
                 st.error(
                     f"Le binaire {compiled_exe_path} n'existe pas encore : compilez d'abord le rendu OCaml."
                 )
             else:
-                exit_code, _ = run_ocaml_submission_in_nsjail(selected_student_dir, compiled_exe_path)
+                exit_code, _, output = run_ocaml_submission_in_nsjail(selected_student_dir, compiled_exe_path)
                 if exit_code == 0:
                     st.success("Exécution NsJail terminée avec succès.")
+
+                    # st.markdown("**Sortie de cette commande Bash (log)**")
+                    # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
+
+                    render_code_log(
+                        get_ocaml_exec_log_path(selected_student_dir),
+                        detect_language(code_path),
+                        "Aucun log d'exécution n'est encore disponible. Cliquez sur le bouton d'exécution pour en générer un.",
+                    )
                 else:
                     st.warning(f"Exécution NsJail terminée avec le code de retour {exit_code}.")
 
-        render_code_log(
-            get_ocaml_exec_log_path(selected_student_dir),
-            detect_language(code_path),
-            "Aucun log d'exécution n'est encore disponible. Cliquez sur le bouton d'exécution pour en générer un.",
-        )
-
-    with ocaml_tools_tabs[2]:
+    with ocaml_tools_tabs[3]:
         st.write("Copier le rendu OCaml dans le banc de tests Dune partagé, puis lancer les tests (QCheck + Alcotest) préparés à la main.")
         test_button_key = f"ocaml_test_button::{tp_name}::{selected_student_name}"
         tests_dir = get_ocaml_tests_dir(tp_name)
@@ -1681,24 +1740,27 @@ def render_submissions_mode(tp_name: str) -> None:
             )
 
         if st.button("Lancer les tests (Dune)", key=test_button_key, type="primary", width='stretch'):
-            exit_code, _, html_path = run_ocaml_dune_tests(tp_name, code_path)
+            exit_code, _, html_path, output = run_ocaml_dune_tests(tp_name, code_path)
             if exit_code == 0:
                 st.success(f"Tests Dune terminés avec succès. Le rendu HTML a été généré dans {html_path.name}.")
+
+                st.markdown("**Sortie de cette commande Bash (log)**")
+                # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
+
+                test_html_tab, test_log_tab = st.tabs(["HTML coloré", "Log brut"])
+                with test_html_tab:
+                    render_html_log(
+                        get_ocaml_test_html_path(tp_name),
+                        "Aucun rendu HTML des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                    )
+                with test_log_tab:
+                    render_code_log(
+                        get_ocaml_test_log_path(tp_name),
+                        detect_language(code_path),
+                        "Aucun log de tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                    )
             else:
                 st.warning(f"Tests Dune terminés avec le code de retour {exit_code}.")
-
-        test_log_tab, test_html_tab = st.tabs(["Log brut", "HTML coloré"])
-        with test_log_tab:
-            render_code_log(
-                get_ocaml_test_log_path(tp_name),
-                detect_language(code_path),
-                "Aucun log de tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
-            )
-        with test_html_tab:
-            render_html_log(
-                get_ocaml_test_html_path(tp_name),
-                "Aucun rendu HTML des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
-            )
 
 
 def render_classroom_mode(tp_name: str) -> None:
@@ -2085,9 +2147,8 @@ def main() -> None:
     st.sidebar.markdown("Ce dashboard utilise Python 3 et streamlit, et a été développé en avril 2026, par [Lilian BESSON](https://github.com/Naereen/) pour les TP de la MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [license libre MIT](https://lbesson.mit-license.org/).")
     st.sidebar.caption("*Note* : des outils d'IA génératives ✨, comme [Google Gemini](https://gemini.google.com/) et [GitHub Copilot](https://github.com/copilot/), m'ont aidés à produire \"rapidement\" cette démo d'une idée de micro-logiciel.")
 
-    if DISPLAY_LOGO_LYCEE:
-        # st.sidebar.image(str(ROOT_DIR / "logo.png"), width=120)
-        st.sidebar.image(str(ROOT_DIR / "logo.jpeg"), width=120)
+    if LOGO_LYCEE:
+        st.sidebar.image(str(ROOT_DIR / LOGO_LYCEE), width=120)
 
     st.sidebar.caption("Développé pour mes usages personnels, pour la MP2I au Lycée Kléber.")
     full_sha, short_sha, modification_date = get_current_git_commit()

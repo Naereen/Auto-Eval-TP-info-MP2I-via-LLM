@@ -215,6 +215,7 @@ __marimo__/
 
 # OCaml and C compilation temporary files
 *.cma
+*.cmx
 *.cmxa
 *.cmo
 *.cmi

@@ -81,6 +81,8 @@ Le mode Évaluation des rendus permet de :
 - sauvegarder la notation dans `rendus-des-etudiants/<tp>/<rendu>/notes.json` ;
 - recharger automatiquement cette notation lors d'une réouverture du rendu.
 
+Pour les rendus OCaml, ce mode ajoute aussi des actions à la demande, déclenchées uniquement par bouton : compilation locale, exécution du binaire dans NsJail, puis lancement des tests Dune préparés à la main avec sauvegarde des logs et du rendu HTML coloré.
+
 ![documentation-mode-2-évaluation-rendus-par-étudiant-1.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-1.png)
 ![documentation-mode-2-évaluation-rendus-par-étudiant-2.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-2.png)
 
@@ -147,6 +149,9 @@ Le mode Progression annuelle individuelle permet de :
 
 ```json
 {
+
+- `rendus-des-etudiants/<tp>/<rendu>/ocamlopt_code_rendu.log` et `exec_code_rendu.log` : logs de compilation et d'exécution pour les rendus OCaml évalués à la demande ;
+- `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.log` et `test_code_rendu.html` : sortie brute et rendu HTML coloré des tests Dune exécutés à la demande.
   "format_version": 1,
   "tp_name": "03-types-polymorphes-etc-ocaml",
   "student_name": "ETUDIANT1_Etudiant1",
@@ -192,6 +197,21 @@ streamlit run streamlit_app.py --server.port 8765
 ```
 
 Le dashboard s'ouvre tout seul, sur l'adresse http://localhost:8765/, puis découvre automatiquement les dossiers de TP et les rendus disponibles.
+
+## Tests automatiques OCaml
+
+Un premier banc de tests automatiques OCaml est fourni pour le rendu [rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/).
+
+Il utilise `dune`, `alcotest`, `qcheck` et `qcheck-alcotest`, et couvre les fonctions du fichier `code_rendu.ml` avec des tests unitaires et des tests de propriétés.
+
+Depuis ce dossier, on peut lancer :
+
+```bash
+cd rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1
+dune runtest
+```
+
+Depuis le dashboard, le mode `2 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans NsJail, puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
 
 ------
 
