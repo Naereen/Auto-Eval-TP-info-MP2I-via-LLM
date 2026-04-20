@@ -46,6 +46,7 @@ REPORT_MD_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.md", "compte_rendu
 
 BAREME_FILENAME: Final[str] = "bareme.json"
 NOTES_FILENAME: Final[str] = "notes.json"
+
 DUNE_TESTS_DIR: Final[str] = "dune_tests"
 OCAML_COMPILE_LOG_FILENAME: Final[str] = "ocamlopt_code_rendu.log"
 OCAML_INTERPRET_LOG_FILENAME: Final[str] = "ocaml_interpreter_code_rendu.log"
@@ -54,6 +55,13 @@ OCAML_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
 OCAML_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
 OCAML_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
 
+CRITERION_TESTS_DIR: Final[str] = "criterion_tests"
+C_COMPILE_LOG_FILENAME: Final[str] = "gcc_code_rendu.log"
+C_EXEC_LOG_FILENAME: Final[str] = "exec_code_rendu.log"
+C_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
+C_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
+C_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
+
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
 
@@ -61,12 +69,13 @@ APP_MODES: Final[tuple[str, ...]] = (
     "0 - Documentation",
     "1 - Barème",
     "2.a - Génération IA de tests OCaml",
+    "2.b - Génération IA de tests C",
     "3 - Évaluation des rendus",
     "4 - Vue de la classe par TP",
     "5 - Progression annuelle individuelle",
 )
 
-SYSTEM_PROMPT = "Tu es une IA utile et extrêmement efficace, experte en informatique en français. Tu aides un professeur d'informatique en classes préparatoires CPGE, filière MP2I, en France."
+SYSTEM_PROMPT = "Tu es une IA utile et extrêmement efficace, experte en informatique, en langue française. Tu vas m'aider, je suis un professeur d'informatique en Classes Préparatoires CPGE, dans la filière MP2I, en France."
 
 
 # Typed payloads make the persisted JSON structures easier to reason about.
@@ -1998,9 +2007,9 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
 
 
     st.divider()
-    st.subheader("Outils d'évaluation de code OCaml semi-automatisé")
+    st.subheader("Outils d'évaluation de code (OCaml ou C) semi-automatisé")
     st.caption(
-        "Aucune action n'est lancée automatiquement : la compilation, l'exécution NsJail et les tests Dune ne démarrent qu'après clic explicite sur un bouton."
+        "Aucune action n'est lancée automatiquement : la compilation et l'exécution isolée dans [`NsJail`](https://nsjail.dev/), ou les batteries de test ne démarrent qu'après un clic explicite sur le bon bouton."
     )
 
     if selected_student_dir is None or code_path is None:
@@ -2008,154 +2017,151 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
         return
 
     if code_path.suffix != ".ml":
-        st.warning("Les actions à la demande sont pour l'instant réservées aux rendus OCaml (`code_rendu.ml`).")
-        return
+        st.warning("Les actions à la demande sont pour l'instant réservées aux rendus OCaml (e.g. `code_rendu.ml`).")
+        # TODO: implémenter les fonctionnalités d'actions à la demande, pour les rendus en langage C (e.g. `code_rendu.c`)
+        c_tools_tabs = st.tabs(["A - Compiler", "B - Exécuter dans la safebox", "C - Tests complets"])
+        # TODO: inspire toi de ce qu'on a fait pour OCaml, mais cette fois, fait le pour le langage C, pour cette partie là.
+    else:
+        compiled_exe_path = get_ocaml_compiled_exe_path(tp_name, selected_student_name or "")
+        ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Interpréter dans la safebox", "C - Exécuter dans la safebox", "D - Tests complets"])
 
-    compiled_exe_path = get_ocaml_compiled_exe_path(tp_name, selected_student_name or "")
-    ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Interpréter dans la safebox", "C - Exécuter dans la safebox", "D - Tests complets", "E - (TODO) Auto-évaluation complète en un clic"])
-
-    with ocaml_tools_tabs[0]:
-        st.write("Compiler le fichier OCaml rendu, mais sans prendre encore le risque de lancer le binaire (il faut rester un peu prudent).")
-        compile_button_key = f"ocaml_compile_button::{tp_name}::{selected_student_name}"
-        if st.button("Compiler le rendu OCaml (ocamlopt)", key=compile_button_key, type="primary", width='stretch'):
-            exit_code, compiled_exe_path, log_path, output = compile_ocaml_submission(selected_student_dir, code_path, compiled_exe_path)
-            if exit_code == 0:
-                st.success(f"Compilation réussie, terminée avec succès, le binaire est disponible dans {compiled_exe_path}.")
-            else:
-                st.warning(f"Compilation échouée, terminée avec le code de retour {exit_code}.")
-
-            st.markdown("**Sortie de cette commande Bash (log)**")
-            # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
-
-            render_code_log(
-                log_path,
-                detect_language(code_path),
-                "Aucun log de compilation n'est encore disponible. Cliquez sur le bouton de compilation pour en générer un.",
-            )
-
-    with ocaml_tools_tabs[1]:
-        st.write("Interpréter le fichier OCaml rendu en montrant les sorties (ligne par ligne).")
-        interpret_button_key = f"ocaml_interpret_button::{tp_name}::{selected_student_name}"
-        if st.button("Interpréter le rendu OCaml", key=interpret_button_key, type="primary", width='stretch'):
-            exit_code, log_path, output = interpret_ocaml_submission_in_nsjail(selected_student_dir, code_path)
-            if exit_code == 0:
-                st.success(f"Interprétration réussie, terminée avec succès.")
-            else:
-                st.warning(f"Interprétration échouée, terminée avec le code de retour {exit_code}.")
-
-            st.markdown("**Sortie de cette commande Bash (log)**")
-            # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
-
-            render_code_log(
-                log_path,
-                detect_language(code_path),
-                "Aucun log de compilation n'est encore disponible. Cliquez sur le bouton de compilation pour en générer un.",
-            )
-
-    with ocaml_tools_tabs[2]:
-        st.write("Exécuter le binaire compilé dans une sandbox NsJail.")
-        run_button_key = f"ocaml_run_button::{tp_name}::{selected_student_name}"
-        if st.button("Exécuter dans une safebox (NsJail)", key=run_button_key, type="primary", width='stretch'):
-            if not compiled_exe_path.exists():
-                st.error(
-                    f"Le binaire {compiled_exe_path} n'existe pas encore : compilez d'abord le rendu OCaml."
-                )
-            else:
-                exit_code, _, output = run_ocaml_submission_in_nsjail(selected_student_dir, compiled_exe_path)
+        with ocaml_tools_tabs[0]:
+            st.write("Compiler le fichier OCaml rendu, mais sans prendre encore le risque de lancer le binaire (il faut rester un peu prudent).")
+            compile_button_key = f"ocaml_compile_button::{tp_name}::{selected_student_name}"
+            if st.button("Compiler le rendu OCaml (ocamlopt)", key=compile_button_key, type="primary", width='stretch'):
+                exit_code, compiled_exe_path, log_path, output = compile_ocaml_submission(selected_student_dir, code_path, compiled_exe_path)
                 if exit_code == 0:
-                    st.success("Exécution NsJail terminée avec succès.")
-
-                    # st.markdown("**Sortie de cette commande Bash (log)**")
-                    # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
-
-                    render_code_log(
-                        get_ocaml_exec_log_path(selected_student_dir),
-                        detect_language(code_path),
-                        "Aucun log d'exécution n'est encore disponible. Cliquez sur le bouton d'exécution pour en générer un.",
-                    )
+                    st.success(f"Compilation réussie, terminée avec succès, le binaire est disponible dans {compiled_exe_path}.")
                 else:
-                    st.warning(f"Exécution NsJail terminée avec le code de retour {exit_code}.")
+                    st.warning(f"Compilation échouée, terminée avec le code de retour {exit_code}.")
 
-    with ocaml_tools_tabs[3]:
-        st.write("Copier le rendu OCaml dans le banc de tests Dune partagé, puis lancer les tests (QCheck + Alcotest) préparés à la main.")
-        test_button_key = f"ocaml_test_button::{tp_name}::{selected_student_name}"
-        tests_dir = get_ocaml_tests_dir(tp_name)
-        if not tests_dir.exists():
-            st.info(
-                f"Le dossier partagé des tests est absent pour ce TP : {tests_dir}. Il sera créé automatiquement au premier lancement."
-            )
+                st.markdown("**Sortie de cette commande Bash (log)**")
+                # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
 
-        if st.button("Lancer les tests (Dune)", key=test_button_key, type="primary", width='stretch'):
-            exit_code, log_path, artifact_path, output = run_ocaml_dune_tests(
-                tp_name, code_path, json_mode=False
-            )
-            if exit_code == 0:
-                st.success(f"Tests Dune terminés entièrement avec succès. Le rendu a été généré dans `{artifact_path.name}`.")
-            else:
-                st.success(f"Tests Dune terminés avec une erreur, et le code de retour {exit_code}. Le rendu a-t-il été généré dans `{artifact_path.name}` ?")
-
-            # TODO: je veux aussi afficher le JSON ?
-            exit_code_json, log_path_json, artifact_path_json, output_json = run_ocaml_dune_tests(
-                tp_name, code_path, json_mode=True
-            )
-
-            st.markdown("**Sortie de cette commande Bash (log)**")
-            # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
-
-            test_html_tab, test_log_tab = st.tabs(["Jolie sortie", "Log brut"])
-            with test_html_tab:
-                if artifact_path_json and artifact_path_json.exists():
-                    json_payload = load_json_object(artifact_path_json)
-                    if json_payload is None:
-                        set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                        render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
-                        st.error(
-                            f"Le fichier JSON/HTML {artifact_path_json.name} n'a pas pu être lu correctement."
-                        )
-                        st.code(read_text_file(str(artifact_path)), language="json", line_numbers=True, wrap_lines=True, height=520)
-                    else:
-                        # st.json(json_payload)
-                        if isinstance(json_payload, dict):
-                            json_payload_dict = cast(dict[str, object], json_payload)
-                            success = json_payload_dict.get("success")
-                            failures = json_payload_dict.get("failures")
-                            time = json_payload_dict.get("time")
-                            ocaml_tests_note_sur_20 = set_ocaml_tests_note_sur_20(
-                                tp_name,
-                                selected_student_name,
-                                compute_ocaml_tests_note_sur_20(success, failures),
-                            )
-
-                            render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, ocaml_tests_note_sur_20)
-                            render_ocaml_tests_note_metric(st, ocaml_tests_note_sur_20)
-                            st.caption(
-                                f"Résumé des tests OCaml : {success} succès, {failures} échec{'s' if int(str(failures)) > 0 else ''}, temps d'exécution {time}s."
-                            )
-                        else:
-                            set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                            render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
-                            st.warning("Le contenu JSON des tests n'a pas le format attendu.")
-                else:
-                    set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
-                    render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
-                    st.warning("Aucune sortie JSON exploitable n'a été produite par les tests Dune.")
-                # HTML, by default
-                # else:
-                render_html_log(
-                    artifact_path,
-                    "Aucun rendu HTML des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
-                )
-            with test_log_tab:
                 render_code_log(
                     log_path,
                     detect_language(code_path),
-                    "Aucun log de tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                    "Aucun log de compilation n'est encore disponible. Cliquez sur le bouton de compilation pour en générer un.",
                 )
 
-    with ocaml_tools_tabs[4]:
-        st.write("Lancer un processus complet d'évaluation quasi-automatique du code rendu par l'étudiant, de la compilation à la lecture du fichier JSON produit par Alcotest (`dune exec`).")
-        pass
-        # TODO: ici, il faudrait un bouton qui fasse le job de la compilation (étape "A - Compiler") et ("D - Tests complets") en un seul clic... pas facile ?
+        with ocaml_tools_tabs[1]:
+            st.write("Interpréter le fichier OCaml rendu en montrant les sorties (ligne par ligne).")
+            interpret_button_key = f"ocaml_interpret_button::{tp_name}::{selected_student_name}"
+            if st.button("Interpréter le rendu OCaml", key=interpret_button_key, type="primary", width='stretch'):
+                exit_code, log_path, output = interpret_ocaml_submission_in_nsjail(selected_student_dir, code_path)
+                if exit_code == 0:
+                    st.success(f"Interprétration réussie, terminée avec succès.")
+                else:
+                    st.warning(f"Interprétration échouée, terminée avec le code de retour {exit_code}.")
+
+                st.markdown("**Sortie de cette commande Bash (log)**")
+                # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
+
+                render_code_log(
+                    log_path,
+                    detect_language(code_path),
+                    "Aucun log de compilation n'est encore disponible. Cliquez sur le bouton de compilation pour en générer un.",
+                )
+
+        with ocaml_tools_tabs[2]:
+            st.write("Exécuter le binaire compilé dans une sandbox NsJail.")
+            run_button_key = f"ocaml_run_button::{tp_name}::{selected_student_name}"
+            if st.button("Exécuter dans une safebox (NsJail)", key=run_button_key, type="primary", width='stretch'):
+                if not compiled_exe_path.exists():
+                    st.error(
+                        f"Le binaire {compiled_exe_path} n'existe pas encore : compilez d'abord le rendu OCaml."
+                    )
+                else:
+                    exit_code, _, output = run_ocaml_submission_in_nsjail(selected_student_dir, compiled_exe_path)
+                    if exit_code == 0:
+                        st.success("Exécution NsJail terminée avec succès.")
+
+                        # st.markdown("**Sortie de cette commande Bash (log)**")
+                        # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
+
+                        render_code_log(
+                            get_ocaml_exec_log_path(selected_student_dir),
+                            detect_language(code_path),
+                            "Aucun log d'exécution n'est encore disponible. Cliquez sur le bouton d'exécution pour en générer un.",
+                        )
+                    else:
+                        st.warning(f"Exécution NsJail terminée avec le code de retour {exit_code}.")
+
+        with ocaml_tools_tabs[3]:
+            st.write("Copier le rendu OCaml dans le banc de tests Dune partagé, puis lancer les tests (QCheck + Alcotest) préparés à la main.")
+            test_button_key = f"ocaml_test_button::{tp_name}::{selected_student_name}"
+            tests_dir = get_ocaml_tests_dir(tp_name)
+            if not tests_dir.exists():
+                st.info(
+                    f"Le dossier partagé des tests est absent pour ce TP : {tests_dir}. Il sera créé automatiquement au premier lancement."
+                )
+
+            if st.button("Lancer les tests (Dune)", key=test_button_key, type="primary", width='stretch'):
+                exit_code, log_path, artifact_path, output = run_ocaml_dune_tests(
+                    tp_name, code_path, json_mode=False
+                )
+                if exit_code == 0:
+                    st.success(f"Tests Dune terminés entièrement avec succès. Le rendu a été généré dans `{artifact_path.name}`.")
+                else:
+                    st.success(f"Tests Dune terminés avec une erreur, et le code de retour {exit_code}. Le rendu a-t-il été généré dans `{artifact_path.name}` ?")
+
+                # TODO: je veux aussi afficher le JSON ?
+                exit_code_json, log_path_json, artifact_path_json, output_json = run_ocaml_dune_tests(
+                    tp_name, code_path, json_mode=True
+                )
+
+                st.markdown("**Sortie de cette commande Bash (log)**")
+                # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
+
+                test_html_tab, test_log_tab = st.tabs(["Jolie sortie", "Log brut"])
+                with test_html_tab:
+                    if artifact_path_json and artifact_path_json.exists():
+                        json_payload = load_json_object(artifact_path_json)
+                        if json_payload is None:
+                            set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
+                            render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
+                            st.error(
+                                f"Le fichier JSON/HTML {artifact_path_json.name} n'a pas pu être lu correctement."
+                            )
+                            st.code(read_text_file(str(artifact_path)), language="json", line_numbers=True, wrap_lines=True, height=520)
+                        else:
+                            # st.json(json_payload)
+                            if isinstance(json_payload, dict):
+                                json_payload_dict = cast(dict[str, object], json_payload)
+                                success = json_payload_dict.get("success")
+                                failures = json_payload_dict.get("failures")
+                                time = json_payload_dict.get("time")
+                                ocaml_tests_note_sur_20 = set_ocaml_tests_note_sur_20(
+                                    tp_name,
+                                    selected_student_name,
+                                    compute_ocaml_tests_note_sur_20(success, failures),
+                                )
+
+                                render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, ocaml_tests_note_sur_20)
+                                render_ocaml_tests_note_metric(st, ocaml_tests_note_sur_20)
+                                st.caption(
+                                    f"Résumé des tests OCaml : {success} succès, {failures} échec{'s' if int(str(failures)) > 0 else ''}, temps d'exécution {time}s."
+                                )
+                            else:
+                                set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
+                                render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
+                                st.warning("Le contenu JSON des tests n'a pas le format attendu.")
+                    else:
+                        set_ocaml_tests_note_sur_20(tp_name, selected_student_name, None)
+                        render_ocaml_tests_note_metric(top_ocaml_tests_note_metric, None)
+                        st.warning("Aucune sortie JSON exploitable n'a été produite par les tests Dune.")
+                    # HTML, by default
+                    # else:
+                    render_html_log(
+                        artifact_path,
+                        "Aucun rendu HTML des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                    )
+                with test_log_tab:
+                    render_code_log(
+                        log_path,
+                        detect_language(code_path),
+                        "Aucun log de tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+                    )
 
 
 def render_classroom_mode(tp_name: str) -> None:
@@ -2413,10 +2419,11 @@ def render_documentation_mode() -> None:
     st.markdown(
         """
         1. Choisir le mode `1 - Barème` pour préparer le barème d'un TP.
-        2. Vérifier le sujet affiché à gauche, puis renseigner ou faire proposer les questions et leurs points.
-        3. Passer au mode `2.a - Génération automatisée de tests OCaml` pour préparer un banc de tests Dune/Alcotest/QCheck.
-        4. Passer au mode `3 - Évaluation des rendus` pour noter un étudiant question par question.
-        5. Sauvegarder les notes, puis consulter les synthèses dans les modes `4` et `5`.
+        2. Vérifier le sujet affiché à gauche, puis renseigner ou essayer de générer un barème automatiquement (par appel à un LLM/AI) pour découvrir et noter les questions, et aussi calculer leurs points.
+        3. Passer au mode `2.a - Génération automatisée de tests OCaml` pour préparer un banc de tests pour le langage OCaml (avec Dune/Alcotest/QCheck).
+        4. TODO: Passer au mode `2.b - Génération automatisée de tests C` pour préparer un banc de tests pour le langage C (avec Criterion).
+        5. Passer au mode `3 - Évaluation des rendus` pour noter un étudiant question par question.
+        6. Sauvegarder les notes, puis consulter les synthèses dans les modes `4` et `5`.
         """
     )
 
@@ -2432,7 +2439,11 @@ def render_documentation_mode() -> None:
         },
         {
             "Mode": "2.a - Génération IA de tests OCaml",
-            "Usage": "Créer un banc de tests OCaml Dune/Alcotest/QCheck si aucun `test_code_rendu.ml` n'est encore présent.",
+            "Usage": "Créer un banc de tests OCaml (avec Dune/Alcotest/QCheck) si aucun `test_code_rendu.ml` n'est encore présent.",
+        },
+        {
+            "Mode": "2.b - Génération IA de tests C",
+            "Usage": "Créer un banc de tests C (avec Criterion) si aucun `test_code_rendu.c` n'est encore présent.",
         },
         {
             "Mode": "3 - Évaluation des rendus",
@@ -2470,29 +2481,29 @@ def render_documentation_mode() -> None:
             """
         )
 
-    with right_col:
-        st.subheader("Fonctionnalités IA")
-        st.markdown(
-            f"""
-            - Le mode `1 - Barème` peut proposer un barème automatique à partir du sujet et de ses sources.
-            - Le mode `2.a - Génération IA de tests OCaml` peut générer automatiquement un fichier `test_code_rendu.ml` s'il n'existe pas encore, à partir du sujet et du barème courant.
-            - Le mode `3 - Évaluation des rendus` peut proposer une notation automatique à partir du sujet, du barème, du code et du compte-rendu.
-            - Les modes `1` et `3` injectent leur proposition IA dans l'éditeur courant, puis restent modifiables avant sauvegarde.
-            - Le mode `2` écrit directement un fichier `test_code_rendu.ml` dans `dune_tests/` si la génération est demandée.
-            - À propos de ces requêtes AI : {help_credits_llm}
-            """
-        )
-
         st.subheader("Conseils d'usage")
         st.markdown(
             """
-            - Commencer par sauvegarder un barème stable avant d'évaluer plusieurs étudiants.
+            - Commencer par sauvegarder un barème stable, avant d'évaluer plusieurs étudiants.
             - Relire les propositions IA avant sauvegarde, surtout si le sujet ou le rendu est incomplet.
             - Utiliser les vues de synthèse uniquement après avoir sauvegardé les notations individuelles.
             """
         )
 
-    with st.expander("Afficher les TP actuellement détectés"):
+    with right_col:
+        st.subheader("✨ Fonctionnalités IA ✨")
+        st.markdown(
+            f"""
+            - Le mode `1 - Barème` peut proposer un barème automatique à partir du sujet et de ses sources.
+            - Les modes `2.a - Génération IA de tests OCaml` et `2.b - Génération IA de tests C` peuvent générer automatiquement des bans de test, s'il n'existent pas encore, à partir des sources du sujet, et du barème généré ou mis au point.
+            - Le mode `3 - Évaluation des rendus` peut proposer une notation automatique à partir du sujet, du barème, du code et du compte-rendu.
+            - Les modes `1` et `3` injectent leur proposition IA dans l'éditeur courant, puis restent modifiables avant sauvegarde.
+            - Les modes `2.a` et `2.b` écrivent directement une batterie de test (`test_code_rendu.ml` dans `dune_tests/`, ou `test_code_rendu.c` dans `criterion_tests/`), si la génération est demandée et si elle est réussie.
+            - À propos de ces requêtes AI : {help_credits_llm}
+            """
+        )
+
+    with st.expander("Afficher les TP actuellement détectés", expanded=True):
         if tp_names:
             st.write("- " + "\n- ".join(tp_names))
         else:
@@ -2533,10 +2544,12 @@ def main() -> None:
     elif selected_mode == "1 - Barème":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut rédiger son barème", tp_names)
         render_bareme_mode(selected_tp)
-
     elif selected_mode == "2.a - Génération IA de tests OCaml":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut générer les tests OCaml", tp_names)
         render_ocaml_tests_generation_mode(selected_tp)
+    elif selected_mode == "2.b - Génération IA de tests C":
+        selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut générer les tests C", tp_names)
+        render_c_tests_generation_mode(selected_tp)
     elif selected_mode == "3 - Évaluation des rendus":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut évaluer les documents rendus par la classe", tp_names)
         render_submissions_mode(selected_tp)
@@ -2551,7 +2564,7 @@ def main() -> None:
     st.sidebar.subheader("À propos de cet outil ?")
     st.sidebar.markdown("Vous avez des *idées* ? Un *bug* à signaler ? [Ouvrez un ticket sur GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new) !")
     st.sidebar.markdown("Ce dashboard utilise Python 3 et streamlit, et a été développé en avril 2026, par [Lilian BESSON](https://github.com/Naereen/) pour les TP de la MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [license libre MIT](https://lbesson.mit-license.org/).")
-    st.sidebar.caption("*Note* : des outils d'IA génératives ✨, comme [Google Gemini](https://gemini.google.com/) et [GitHub Copilot](https://github.com/copilot/), m'ont aidés à produire \"rapidement\" cette démo d'une idée de micro-logiciel.")
+    st.sidebar.caption("*Note* : les outils d'IA génératives ✨ [Google Gemini](https://gemini.google.com/) et [GitHub Copilot](https://github.com/copilot/) m'ont aidés à produire \"rapidement\" cette démo d'une idée de micro-logiciel.")
 
     if LOGO_LYCEE:
         st.sidebar.image(str(ROOT_DIR / LOGO_LYCEE), width=120)
