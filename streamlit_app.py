@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import statistics
+import subprocess
 from pathlib import Path
 from typing import Final, TypedDict
 
@@ -26,6 +27,9 @@ from gemini_requests import response_from_llm, help_credits_llm
 ROOT_DIR: Final[Path] = Path(__file__).resolve().parent
 SUBJECTS_DIR: Final[Path] = ROOT_DIR / "sujets-de-travaux-pratiques"
 SUBMISSIONS_DIR: Final[Path] = ROOT_DIR / "rendus-des-etudiants"
+REPOSITORY_URL: Final[str] = "https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM"
+DISPLAY_LOGO_LYCEE: bool = True
+
 # Preferred filenames are checked first before falling back to broader glob searches.
 CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "code_rendu.ml")
 REPORT_PDF_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.pdf", "compte_rendu.pdf")
@@ -95,6 +99,40 @@ class NumericSummary(TypedDict):
 
 
 # Repository discovery and file loading helpers.
+
+
+@st.cache_data(show_spinner=False)
+def get_current_git_commit() -> tuple[str | None, str | None, str | None]:
+    """Return the full, short git hashes and the date, for the current repository when available."""
+    try:
+        full_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        short_sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=ROOT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        modification_date = subprocess.run(
+            ["git", "log", "-1", "--format=%cr"],
+            cwd=ROOT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None, None, None
+
+    if not full_sha or not short_sha or not modification_date:
+        return None, None, None
+
+    return full_sha, short_sha, modification_date
 
 
 def list_subdirectories(directory: Path) -> list[Path]:
@@ -1053,7 +1091,7 @@ def render_bareme_mode(tp_name: str) -> None:
         if st.button("Appliquer un même barème à toutes les questions", width='stretch'):
             st.session_state[uniform_points_state_key] = not st.session_state[uniform_points_state_key]
 
-        if st.button("✨ Proposer un barème automatique par IA ✨", width='stretch', help=f"Analyse le sujet PDF et ses sources LaTeX et Markdown, pour proposer un barème qui pourra être sauvegardé dans un fichier local. {help_credits_llm}"):
+        if st.button("✨ Proposer un barème automatique par IA ? ✨", width='stretch', help=f"Analyse le sujet PDF et ses sources LaTeX et Markdown, pour proposer un barème qui pourra être sauvegardé dans un fichier local. {help_credits_llm}"):
             # On construit le prompt
             prompt = """
             Analyse ce sujet de Travaux Pratiques  d'Informatique, je t'ai joint le sujet en PDF et ses sources LaTeX et Markdown.
@@ -1234,7 +1272,7 @@ def render_submissions_mode(tp_name: str) -> None:
 
             if selected_student_name and selected_student_dir is not None:
                 if st.button(
-                    "✨ Proposer une notation automatique par IA ✨",
+                    "✨ Proposer une notation automatique par IA ? ✨",
                     width='stretch',
                     help=f"Analyse le sujet, le barème sauvegardé, le code rendu et le compte-rendu pour proposer une notation question par question. {help_credits_llm}",
                 ):
@@ -1754,7 +1792,7 @@ def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
 def main() -> None:
     """Build the Streamlit interface and wire repository discovery to UI widgets."""
     st.set_page_config(
-        page_title="Evaluator TP MP2I @ Lycée Kléber (Lilian BESSON)",
+        page_title="Évaluator TP MP2I @ Lycée Kléber (par Lilian BESSON)",
         page_icon="📚",
         layout="wide",
         initial_sidebar_state="expanded",
@@ -1762,7 +1800,8 @@ def main() -> None:
 
     tp_names = discover_tp_names()
 
-    st.sidebar.title("Evaluator TP MP2I")
+    st.sidebar.title(f"*Évaluator* TP info MP2I")
+
     st.sidebar.subheader("Navigation")
     selected_mode = st.sidebar.selectbox("Choisir un mode", APP_MODES, index=0)
 
@@ -1785,17 +1824,19 @@ def main() -> None:
     else:
         render_placeholder_mode("TP à sélectionner", selected_mode)
 
-    st.divider()
-    st.markdown(
-        """
-        ### Suggestions ?
-        Vous avez des idées ? Alors s'il-vous-plaît, [ouvrez un ticket](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new) !
+    st.sidebar.subheader("À propos de cet outil ?")
+    st.sidebar.markdown("Vous avez des *idées* ? Un *bug* à signaler ? [Ouvrez un ticket sur GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new) !")
+    st.sidebar.markdown("Ce dashboard utilise Python 3 et streamlit, et a été développé en avril 2026, par [Lilian BESSON](https://github.com/Naereen/) pour les TP de la MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [license libre MIT](https://lbesson.mit-license.org/).")
+    st.sidebar.caption("*Note* : des outils d'IA génératives ✨, comme [Google Gemini](https://gemini.google.com/) et [GitHub Copilot](https://github.com/copilot/), m'ont aidés à produire \"rapidement\" cette démo d'une idée de micro-logiciel.")
 
-        ### À propos
-        Dashboard développé par [Lilian BESSON](https://github.com/Naereen/) pour les TP de MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [License MIT](https://lbesson.mit-license.org/), en avril 2026.
-        """
-    )
-
-
+    if DISPLAY_LOGO_LYCEE:
+        # st.sidebar.image(str(ROOT_DIR / "logo.png"), width=120)
+        st.sidebar.image(str(ROOT_DIR / "logo.jpeg"), width=120)
+    
+    st.sidebar.caption("Développé pour mes usages personnels, pour la MP2I au Lycée Kléber.")
+    full_sha, short_sha, modification_date = get_current_git_commit()
+    if full_sha and short_sha and modification_date:
+        st.sidebar.caption(f"[Version git {short_sha}, modifié {modification_date}]({REPOSITORY_URL}/commit/{full_sha})")
+    
 if __name__ == "__main__":
     main()
