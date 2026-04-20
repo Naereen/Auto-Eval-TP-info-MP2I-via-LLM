@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import base64
 import json
+import html as html_lib
+import re
 import statistics
 import subprocess
+import shutil
 from pathlib import Path
 from typing import Final, TypedDict
 
@@ -36,6 +39,11 @@ REPORT_PDF_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.pdf", "compte_ren
 REPORT_MD_CANDIDATES: Final[tuple[str, ...]] = ("compte-rendu.md", "compte_rendu.md")
 BAREME_FILENAME: Final[str] = "bareme.json"
 NOTES_FILENAME: Final[str] = "notes.json"
+DUNE_TESTS_DIR: Final[str] = "dune_tests"
+OCAML_COMPILE_LOG_FILENAME: Final[str] = "ocamlopt_code_rendu.log"
+OCAML_EXEC_LOG_FILENAME: Final[str] = "exec_code_rendu.log"
+OCAML_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
+OCAML_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
 APP_MODES: Final[tuple[str, ...]] = (
@@ -198,9 +206,12 @@ def find_subject_markdown_files(tp_name: str) -> list[Path]:
 
 
 @st.cache_data(show_spinner=True)
-def discover_student_dirs(tp_name: str) -> list[Path]:
+def discover_student_dirs(tp_name: str, name_of_dir_to_ignore=DUNE_TESTS_DIR) -> list[Path]:
     """List submission directories available for the selected practical session."""
-    return list_subdirectories(SUBMISSIONS_DIR / tp_name)
+    all_dirs = list_subdirectories(SUBMISSIONS_DIR / tp_name)
+    if name_of_dir_to_ignore:
+        all_dirs = [d for d in all_dirs if name_of_dir_to_ignore not in d.parts and name_of_dir_to_ignore not in str(d.name)]
+    return all_dirs
 
 
 @st.cache_data(show_spinner=True)
@@ -209,6 +220,8 @@ def discover_all_student_names() -> list[str]:
     student_names: set[str] = set()
     for tp_name in discover_tp_names():
         for student_dir in discover_student_dirs(tp_name):
+            if DUNE_TESTS_DIR in student_dir.parts or DUNE_TESTS_DIR in str(student_dir.name):
+                continue
             student_names.add(student_dir.name)
     return sorted(student_names)
 
@@ -262,6 +275,165 @@ def read_text_file(path: str) -> str:
 def read_binary_file(path: str) -> bytes:
     """Read a binary file from disk and cache the content."""
     return Path(path).read_bytes()
+
+
+def slugify_for_filename(value: str) -> str:
+    """Convert a display string into a filesystem-friendly slug."""
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip())
+    slug = slug.strip("._-")
+    return slug or "artifact"
+
+
+def run_command_and_capture_output(command: list[str], cwd: Path, log_path: Path, timeout=60) -> tuple[int, str]:
+    """Run one command safely, save its combined output, and return the exit code plus output."""
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        )
+        output = normalize_output_piece(completed.stdout)
+        exit_code = completed.returncode
+    except FileNotFoundError as exc:
+        output = f"Commande introuvable : {exc}\n"
+        exit_code = 127
+    except subprocess.TimeoutExpired as exc:
+        output = normalize_output_piece(exc.stdout)
+        output += "\n[Erreur : délai d'exécution dépassé]"
+        exit_code = 124
+
+    if not output.strip():
+        output = "Aucune sortie.\n"
+    log_path.write_text(output, encoding="utf-8")
+    return exit_code, output
+
+
+def normalize_output_piece(value: object) -> str:
+    """Convert a captured output fragment into a UTF-8 string."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    return str(value)
+
+
+def load_log_text(log_path: Path) -> str:
+    """Read a log file when it exists, otherwise return an empty string."""
+    if not log_path.exists():
+        return ""
+    return read_text_file(str(log_path))
+
+
+def render_code_log(log_path: Path, language: str, empty_message: str) -> None:
+    """Render a text log in a syntax-highlighted code block."""
+    log_text = load_log_text(log_path)
+    if log_text:
+        st.code(log_text, language=language, line_numbers=True, height=720)
+    else:
+        st.info(empty_message)
+
+
+def ansi_log_to_html(log_text: str) -> str:
+    """Convert an ANSI-colored log to HTML when possible, with a safe fallback."""
+    try:
+        from ansi2html import Ansi2HTMLConverter  # type: ignore[reportMissingImports]
+        converter = Ansi2HTMLConverter(inline=True)
+        return converter.convert(log_text, full=False)
+    except ImportError:
+        escaped = html_lib.escape(log_text)
+        return f"<pre style=\"white-space: pre-wrap; font-family: monospace; margin: 0;\">{escaped}</pre>"
+
+
+def render_html_log(html_path: Path, empty_message: str) -> None:
+    """Render a generated HTML log inside Streamlit."""
+    if not html_path.exists():
+        st.info(empty_message)
+        return
+
+    html_content = read_text_file(str(html_path))
+    st.iframe(html_content, height=720)
+
+
+def get_ocaml_tests_dir(tp_name: str) -> Path:
+    """Return the directory containing the shared OCaml dune tests for one TP."""
+    return SUBMISSIONS_DIR / tp_name / DUNE_TESTS_DIR
+
+
+def get_ocaml_compile_log_path(student_dir: Path) -> Path:
+    """Return the path of the OCaml compilation log for one student render."""
+    return student_dir / OCAML_COMPILE_LOG_FILENAME
+
+
+def get_ocaml_exec_log_path(student_dir: Path) -> Path:
+    """Return the path of the NsJail execution log for one student render."""
+    return student_dir / OCAML_EXEC_LOG_FILENAME
+
+
+def get_ocaml_test_log_path(tp_name: str) -> Path:
+    """Return the path of the dune test log for one TP."""
+    return get_ocaml_tests_dir(tp_name) / OCAML_TEST_LOG_FILENAME
+
+
+def get_ocaml_test_html_path(tp_name: str) -> Path:
+    """Return the path of the HTML rendering generated from the dune test log."""
+    return get_ocaml_tests_dir(tp_name) / OCAML_TEST_HTML_FILENAME
+
+
+def get_ocaml_compiled_exe_path(tp_name: str, student_name: str) -> Path:
+    """Return the path of the compiled OCaml binary for one student render."""
+    return Path("/tmp") / f"test_ocaml__{slugify_for_filename(tp_name)}__{slugify_for_filename(student_name)}.exe"
+
+
+def compile_ocaml_submission(
+    student_dir: Path, code_path: Path, compiled_exe_path: Path
+) -> tuple[int, Path, Path]:
+    """Compile one OCaml submission and persist the compiler output."""
+    log_path = get_ocaml_compile_log_path(student_dir)
+    exit_code, output = run_command_and_capture_output(
+        ["ocamlopt", "-ccopt", "-static", "-o", str(compiled_exe_path), code_path.name],
+        cwd=student_dir,
+        log_path=log_path,
+    )
+    return exit_code, compiled_exe_path, log_path
+
+
+def run_ocaml_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -> tuple[int, Path]:
+    """Run one compiled OCaml binary inside NsJail and persist the output."""
+    log_path = get_ocaml_exec_log_path(student_dir)
+    nsjail_config = ROOT_DIR / "nsjail_config.cfg"
+    exit_code, output = run_command_and_capture_output(
+        ["nsjail", "--config", str(nsjail_config), "--", str(compiled_exe_path)],
+        cwd=student_dir,
+        log_path=log_path,
+    )
+    return exit_code, log_path
+
+
+def run_ocaml_dune_tests(tp_name: str, code_path: Path) -> tuple[int, Path, Path]:
+    """Copy one OCaml submission into the shared dune tests and run them."""
+    tests_dir = get_ocaml_tests_dir(tp_name)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+
+    dune_code_path = tests_dir / "code_rendu.ml"
+    shutil.copy2(code_path, dune_code_path)
+
+    log_path = get_ocaml_test_log_path(tp_name)
+    html_path = get_ocaml_test_html_path(tp_name)
+
+    exit_code, log_text = run_command_and_capture_output(
+        ["dune", "exe", "--print-metrics", "--display=quiet", "./test_code_rendu.exe"],
+        cwd=tests_dir,
+        log_path=log_path,
+    )
+
+    html_path.write_text(ansi_log_to_html(log_text), encoding="utf-8")
+    return exit_code, log_path, html_path
 
 
 def build_default_bareme(tp_name: str, question_count: int) -> dict[str, object]:
@@ -1443,6 +1615,90 @@ def render_submissions_mode(tp_name: str) -> None:
                 for path in sorted(selected_student_dir.iterdir(), key=lambda item: item.name.lower()):
                     label = "Dossier" if path.is_dir() else "Fichier"
                     st.write(f"- {label} : `{path.name}`")
+
+
+    st.divider()
+    st.subheader("Outils OCaml à la demande")
+    st.caption(
+        "Aucune action n'est lancée automatiquement : la compilation, l'exécution NsJail et les tests Dune ne démarrent qu'après clic explicite sur un bouton."
+    )
+
+    if selected_student_dir is None or code_path is None:
+        st.info("Sélectionnez d'abord un rendu étudiant contenant un fichier `code_rendu.ml` pour activer ces actions.")
+        return
+
+    if code_path.suffix != ".ml":
+        st.warning("Les actions à la demande sont pour l'instant réservées aux rendus OCaml (`code_rendu.ml`).")
+        return
+
+    compiled_exe_path = get_ocaml_compiled_exe_path(tp_name, selected_student_name or "")
+    ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Exécuter dans NsJail", "C - Tests Dune"])
+
+    with ocaml_tools_tabs[0]:
+        st.write("Compiler le fichier OCaml rendu sans lancer le binaire.")
+        compile_button_key = f"ocaml_compile_button::{tp_name}::{selected_student_name}"
+        if st.button("Compiler le rendu OCaml", key=compile_button_key, type="primary", width='content'):
+            exit_code, compiled_exe_path, log_path = compile_ocaml_submission(selected_student_dir, code_path, compiled_exe_path)
+            if exit_code == 0:
+                st.success(f"Compilation réussie, terminée avec succès, le binaire est disponible dans {compiled_exe_path}.")
+            else:
+                st.warning(f"Compilation échouée, terminée avec le code de retour {exit_code}.")
+
+            render_code_log(
+                log_path,
+                detect_language(log_path),
+                "Aucun log de compilation n'est encore disponible. Cliquez sur le bouton de compilation pour en générer un.",
+            )
+
+    with ocaml_tools_tabs[1]:
+        st.write("Exécuter le binaire compilé dans une sandbox NsJail.")
+        run_button_key = f"ocaml_run_button::{tp_name}::{selected_student_name}"
+        if st.button("Exécuter dans NsJail", key=run_button_key, type="primary", width='stretch'):
+            if not compiled_exe_path.exists():
+                st.error(
+                    f"Le binaire {compiled_exe_path} n'existe pas encore : compilez d'abord le rendu OCaml."
+                )
+            else:
+                exit_code, _ = run_ocaml_submission_in_nsjail(selected_student_dir, compiled_exe_path)
+                if exit_code == 0:
+                    st.success("Exécution NsJail terminée avec succès.")
+                else:
+                    st.warning(f"Exécution NsJail terminée avec le code de retour {exit_code}.")
+
+        render_code_log(
+            get_ocaml_exec_log_path(selected_student_dir),
+            detect_language(code_path),
+            "Aucun log d'exécution n'est encore disponible. Cliquez sur le bouton d'exécution pour en générer un.",
+        )
+
+    with ocaml_tools_tabs[2]:
+        st.write("Copier le rendu OCaml dans le banc de tests Dune partagé, puis lancer les tests (QCheck + Alcotest) préparés à la main.")
+        test_button_key = f"ocaml_test_button::{tp_name}::{selected_student_name}"
+        tests_dir = get_ocaml_tests_dir(tp_name)
+        if not tests_dir.exists():
+            st.info(
+                f"Le dossier partagé des tests est absent pour ce TP : {tests_dir}. Il sera créé automatiquement au premier lancement."
+            )
+
+        if st.button("Lancer les tests (Dune)", key=test_button_key, type="primary", width='stretch'):
+            exit_code, _, html_path = run_ocaml_dune_tests(tp_name, code_path)
+            if exit_code == 0:
+                st.success(f"Tests Dune terminés avec succès. Le rendu HTML a été généré dans {html_path.name}.")
+            else:
+                st.warning(f"Tests Dune terminés avec le code de retour {exit_code}.")
+
+        test_log_tab, test_html_tab = st.tabs(["Log brut", "HTML coloré"])
+        with test_log_tab:
+            render_code_log(
+                get_ocaml_test_log_path(tp_name),
+                detect_language(code_path),
+                "Aucun log de tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+            )
+        with test_html_tab:
+            render_html_log(
+                get_ocaml_test_html_path(tp_name),
+                "Aucun rendu HTML des tests Dune n'est encore disponible. Cliquez sur le bouton de tests pour en générer un.",
+            )
 
 
 def render_classroom_mode(tp_name: str) -> None:

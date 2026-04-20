@@ -6,6 +6,62 @@ Ce document ne décrit pas les fonctionnalités déjà livrées. Il recense uniq
 
 - [ ] Supporter des TP qui demandent des rendus de code source en plusieurs fichiers (exemple : `graph.c` + `graph.h`, et `stack.c` + `stack.h`, et `euler.c` pour le TP38).
 
+----
+
+## Tester *automatiquement* toutes les questions de programmation d'un TP donné ?
+
+### 1) Exécuter "dans une sandbox safe" un programme après l'avoir compilé localement
+
+Je peux isoler les exécution via [`nsjail`](https://nsjail.dev/), et utiliser les modules sus-nommés pour écrire des tests d'un TP en OCaml ou en C.
+
+#### Pour OCaml ?
+
+```bash
+ocamlopt -ccopt -static -o /tmp/test_ocaml.exe ./code_rendu.ml
+nsjail --config ./nsjail_config.cfg -- /tmp/test_ocaml.exe
+```
+
+TODO: faire aussi la compilation derrière la "safe sandbox" de nsjail ?
+
+#### Pour le C ?
+
+```bash
+gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_rendu.c -lm
+nsjail --config ./nsjail_config.cfg -- /tmp/test_c.exe
+```
+
+TODO: faire aussi la compilation derrière la "safe sandbox" de nsjail ?
+
+### 2) Supporter des fichiers de tests, fournis préalablement et écrits à la main (par AlcoTesT/QCheck en OCaml, et AFL++ et Criterion en C)
+
+#### Pour OCaml ?
+
+Un premier exemple est maintenant présent pour `rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/`, avec `dune`, `alcotest`, `qcheck` et `qcheck-alcotest`.
+
+Le dashboard permet déjà, pour un rendu OCaml sélectionné, de compiler le fichier, de l'exécuter dans NsJail et de lancer les tests Dune préparés à la main en conservant les logs.
+
+- [ ] Généraliser cette infrastructure de tests OCaml aux autres rendus et autres TP.
+
+```bash
+ocamlopt -ccopt -static -o /tmp/test_ocaml.exe ./code_rendu.ml
+nsjail --config ./nsjail_config.cfg -- ./test_ocaml.exe
+```
+
+#### Pour le C ?
+
+TODO: intégrer Criterion et AFL++
+
+```bash
+gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_rendu.c -lm
+nsjail --config ./nsjail_config.cfg -- ./test_c.exe
+```
+
+### 3) Générer ces fichiers de tests automatiquement par IA (Google Gemini), depuis mon dashboard !
+
+J'aimerais intégrer à mon outil des prompts (IA/LLM) bien conçus, des boutons et la gestion des sauvegardes des fichiers générés pour facilement générer ces fichiers de tests, automatiquement depuis les sources disponibles sur un des sujets de TP donné.
+
+----
+
 ## À fiabiliser ou corriger (pas urgent)
 
 - [ ] Affiner la génération automatique du barème par LLM/IA à partir du sujet LaTeX, Markdown ou PDF.
@@ -13,8 +69,9 @@ Ce document ne décrit pas les fonctionnalités déjà livrées. Il recense uniq
 - [ ] Vérifier la robustesse des réponses JSON retournées par l'IA quand certaines pièces jointes sont absentes.
 - [ ] Mieux gérer les cas limites où un TP existe sans sujet PDF, sans sources complémentaires, ou avec des rendus partiels.
 
-## À corriger (urgent)
+## À corriger (bugs urgents)
 
+Rien ?
 
 ------
 

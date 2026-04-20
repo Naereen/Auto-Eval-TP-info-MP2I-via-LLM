@@ -221,3 +221,5 @@ __marimo__/
 *.o
 *.exe
 *.out
+*.log
+*.html

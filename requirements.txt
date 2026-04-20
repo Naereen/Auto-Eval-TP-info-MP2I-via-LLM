@@ -2,3 +2,4 @@ streamlit>=1.44,<2
 altair
 requests
 google-genai
+ansi2html

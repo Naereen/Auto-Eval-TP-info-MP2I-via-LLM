@@ -226,3 +226,5 @@ let rec produit_unaire n m =
   | Zero -> Zero
   | Successeur n_prec -> somme_unaire m (produit_unaire n_prec m)
 ;;
+
+let () = Printf.printf "Fin du TP 03-types-polymorphes-etc-ocaml pour ETUDIANT1_Etudiant1.\n";;
