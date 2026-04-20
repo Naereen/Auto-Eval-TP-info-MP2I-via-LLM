@@ -955,8 +955,9 @@ def render_bareme_mode(tp_name: str) -> None:
         llm_response_key = get_bareme_llm_response_key(tp_name)
         if llm_response_key in st.session_state:
             st.subheader("Dernier résultat JSON proposé par l'IA")
-            with st.container(height=520):
-                st.json(st.session_state[llm_response_key])
+            with st.expander("Afficher la réponse brute de l'IA (JSON)"):
+                with st.expander(height=520):
+                    st.json(st.session_state[llm_response_key])
 
         if st.session_state[uniform_points_state_key]:
             uniform_points = int(
@@ -1237,7 +1238,7 @@ def render_classroom_mode(tp_name: str) -> None:
                     alt.Chart(alt.Data(values=notes_chart_rows))
                     .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
                     .encode(
-                        x=alt.X("Étudiant:N", sort=None, title="Étudiant"),
+                        x=alt.X("Étudiant:N", sort=None, title="Étudiant", axis=alt.Axis(labelAngle=45)),
                         y=alt.Y("Note /20:Q", scale=alt.Scale(domain=[0, 20]), title="Note /20"),
                         color=alt.Color(
                             "Note /20:Q",
