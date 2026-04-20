@@ -60,7 +60,7 @@ DEFAULT_QUESTION_POINTS: Final[int] = 5
 APP_MODES: Final[tuple[str, ...]] = (
     "0 - Documentation",
     "1 - Barème",
-    "2 - Génération IA de tests OCaml",
+    "2.a - Génération IA de tests OCaml",
     "3 - Évaluation des rendus",
     "4 - Vue de la classe par TP",
     "5 - Progression annuelle individuelle",
@@ -591,10 +591,10 @@ Contraintes impératives :
 - le module principal à tester s'appelle `Code_rendu` et sera importé comme `module CR = Code_rendu` ;
 - écris à la fois des tests unitaires (avec Alcotest) et des tests de propriétés (avec QCheck), quand c'est pertinent ;
 - privilégie des helpers lisibles, des assertions explicites et des générateurs QCheck robustes ;
-- si l'API exacte n'est pas entièrement déductible, construis des tests génériques utiles à partir du sujet et des exemples présents ;
+- si l'API exacte n'est pas entièrement déductible, construis BEAUCOUP de tests génériques utiles à partir du sujet et des exemples présents ;
 {overwrite_instruction}
 
-Le résultat doit constituer un banc de tests sérieux, vraiment très complet, pédagogique et directement exploitable, sans erreur de compilation ou autre problème.
+Le résultat doit constituer un banc de TRÈS NOMBREUX tests sérieux, vraiment très complet, qui soit aussi pédagogique et directement exploitable, sans erreur de compilation ou autre problème.
             """
 
             system_prompt = SYSTEM_PROMPT
@@ -637,10 +637,10 @@ Le résultat doit constituer un banc de tests sérieux, vraiment très complet, 
                 with st.container(height=520):
                     st.write(st.session_state[generation_llm_response_key])
 
-        if test_source_path.exists():
-            with st.expander("Prévisualiser le fichier `test_code_rendu.ml` actuel"):
-                with st.container(height=520):
-                    st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
+        # if test_source_path.exists():
+        #     with st.expander("Prévisualiser le fichier `test_code_rendu.ml` actuel"):
+        #         with st.container(height=520):
+        #             st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
 
         if tests_dir.exists():
             st.subheader("Contenu actuel du dossier `dune_tests/`")
@@ -2377,7 +2377,7 @@ def render_documentation_mode() -> None:
         """
         1. Choisir le mode `1 - Barème` pour préparer le barème d'un TP.
         2. Vérifier le sujet affiché à gauche, puis renseigner ou faire proposer les questions et leurs points.
-        3. Passer au mode `2 - Génération automatisée de tests OCaml` pour préparer un banc de tests Dune/Alcotest/QCheck.
+        3. Passer au mode `2.a - Génération automatisée de tests OCaml` pour préparer un banc de tests Dune/Alcotest/QCheck.
         4. Passer au mode `3 - Évaluation des rendus` pour noter un étudiant question par question.
         5. Sauvegarder les notes, puis consulter les synthèses dans les modes `4` et `5`.
         """
@@ -2394,7 +2394,7 @@ def render_documentation_mode() -> None:
             "Usage": "Définir le nombre de questions, leurs libellés, leurs points et sauvegarder le `bareme.json` du TP.",
         },
         {
-            "Mode": "2 - Génération automatisée de tests OCaml",
+            "Mode": "2.a - Génération IA de tests OCaml",
             "Usage": "Créer un banc de tests OCaml Dune/Alcotest/QCheck si aucun `test_code_rendu.ml` n'est encore présent.",
         },
         {
@@ -2438,7 +2438,7 @@ def render_documentation_mode() -> None:
         st.markdown(
             f"""
             - Le mode `1 - Barème` peut proposer un barème automatique à partir du sujet et de ses sources.
-            - Le mode `2 - Génération automatisée de tests OCaml` peut générer automatiquement un fichier `test_code_rendu.ml` s'il n'existe pas encore, à partir du sujet et du barème courant.
+            - Le mode `2.a - Génération IA de tests OCaml` peut générer automatiquement un fichier `test_code_rendu.ml` s'il n'existe pas encore, à partir du sujet et du barème courant.
             - Le mode `3 - Évaluation des rendus` peut proposer une notation automatique à partir du sujet, du barème, du code et du compte-rendu.
             - Les modes `1` et `3` injectent leur proposition IA dans l'éditeur courant, puis restent modifiables avant sauvegarde.
             - Le mode `2` écrit directement un fichier `test_code_rendu.ml` dans `dune_tests/` si la génération est demandée.
@@ -2497,7 +2497,7 @@ def main() -> None:
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut rédiger son barème", tp_names)
         render_bareme_mode(selected_tp)
 
-    elif selected_mode == "2 - Génération IA de tests OCaml":
+    elif selected_mode == "2.a - Génération IA de tests OCaml":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut générer les tests OCaml", tp_names)
         render_ocaml_tests_generation_mode(selected_tp)
     elif selected_mode == "3 - Évaluation des rendus":
