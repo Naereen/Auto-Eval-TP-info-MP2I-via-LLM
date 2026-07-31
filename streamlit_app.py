@@ -73,7 +73,7 @@ all:	main.exe run
 
 # Variables
 CC = gcc
-CFLAGS = -Wall -Wextra -Wvla -fsanitize=address,undefined -g
+CFLAGS = -Wall -Wextra -Wvla -fsanitize=address,undefined -g -O0
 LDFLAGS = -lcriterion
 
 graph.o:  graph.c

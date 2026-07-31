@@ -53,6 +53,7 @@ nsjail --config ./nsjail_config.cfg -- ./test_ocaml.exe
 
 - [x] intégrer Criterion : c'est okay
 - [ ] TODO: intégrer AFL++ ?? Est-ce que ça vaut vraiment le coup ? Cela semble complexe...
+- [ ] Généraliser la compilation C multi-fichiers (pas seulement graph.c/stack.c/lib.c/main.c)
 
 ```bash
 gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_rendu.c -lm
