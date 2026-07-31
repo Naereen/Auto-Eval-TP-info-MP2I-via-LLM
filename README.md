@@ -104,9 +104,9 @@ Le mode Évaluation des rendus permet de :
 - sauvegarder la notation dans `rendus-des-etudiants/<tp>/<rendu>/notes.json` ;
 - recharger automatiquement cette notation lors d'une réouverture du rendu.
 
-Pour les rendus OCaml, ce mode ajoute aussi des actions à la demande, déclenchées uniquement par bouton : compilation locale, exécution du binaire dans NsJail, puis lancement des tests Dune préparés à la main avec sauvegarde des logs et du rendu HTML coloré.
+Pour les rendus OCaml, ce mode ajoute aussi des actions à la demande, déclenchées uniquement par bouton : compilation dans NsJail, exécution du binaire dans NsJail, puis lancement des tests Dune préparés à la main avec sauvegarde des logs et du rendu HTML coloré.
 
-Pour les rendus C, ce mode ajoute désormais des actions à la demande déclenchées uniquement par bouton : compilation locale avec `gcc`, exécution du binaire dans NsJail, puis copie du rendu dans `criterion_tests/` et lancement des tests Criterion via `make run_tests_criterion_nojson` et `make run_tests_criterion_json`, avec conservation des logs, du rendu HTML et de la sortie JSON.
+Pour les rendus C, ce mode ajoute désormais des actions à la demande déclenchées uniquement par bouton : compilation avec `gcc` dans NsJail, exécution du binaire dans NsJail, puis copie du rendu dans `criterion_tests/` et lancement des tests Criterion via `make run_tests_criterion_nojson` et `make run_tests_criterion_json`, avec conservation des logs, du rendu HTML et de la sortie JSON.
 
 ![documentation-mode-2-évaluation-rendus-par-étudiant-1.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-1.png)
 ![documentation-mode-2-évaluation-rendus-par-étudiant-2.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-2.png)
@@ -244,7 +244,7 @@ dune runtest
 
 Depuis le dashboard, le mode `2 - Génération automatisée de tests OCaml` peut produire automatiquement un `test_code_rendu.ml` quand il manque, puis le mode `3 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans [NsJail](https://nsjail.dev/), puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
 
-Le mode `2.b - Génération automatisée de tests C` peut de la même façon produire un `criterion_tests/test_code_rendu.c` et un `criterion_tests/Makefile`, puis le mode `3 - Évaluation des rendus` propose des boutons pour compiler le rendu C, l'exécuter dans [NsJail](https://nsjail.dev/) et lancer les tests Criterion via `make run_tests_criterion_nojson` ou `make run_tests_criterion_json`.
+Le mode `2.b - Génération automatisée de tests C` peut de la même façon produire un `criterion_tests/test_code_rendu.c` et un `criterion_tests/Makefile`, puis le mode `3 - Évaluation des rendus` propose des boutons pour compiler le rendu C dans [NsJail](https://nsjail.dev/), l'exécuter dans [NsJail](https://nsjail.dev/) et lancer les tests Criterion via `make run_tests_criterion_nojson` ou `make run_tests_criterion_json`.
 
 ------
 
@@ -265,4 +265,3 @@ La liste des développements, tests et points de fiabilisation encore ouverts se
 [![ForTheBadge built-with-swag](http://ForTheBadge.com/images/badges/built-with-swag.svg)](https://GitHub.com/Naereen/)
 [![ForTheBadge uses-badges](http://ForTheBadge.com/images/badges/uses-badges.svg)](http://ForTheBadge.com)
 [![ForTheBadge uses-git](http://ForTheBadge.com/images/badges/uses-git.svg)](https://GitHub.com/)
-

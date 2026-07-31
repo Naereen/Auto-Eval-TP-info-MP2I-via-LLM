@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import html as html_lib
+import os
 import re
 import statistics
 import subprocess
@@ -31,13 +32,15 @@ ROOT_DIR: Final[Path] = Path(__file__).resolve().parent
 SUBJECTS_DIR: Final[Path] = ROOT_DIR / "sujets-de-travaux-pratiques"
 SUBMISSIONS_DIR: Final[Path] = ROOT_DIR / "rendus-des-etudiants"
 REPOSITORY_URL: Final[str] = "https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM"
+NSJAIL_CONFIG_PATH: Final[Path] = ROOT_DIR / "nsjail_config.cfg"
 
 # LOGO_LYCEE: Final[str] = "logo.png"
 LOGO_LYCEE: Final[str] = "logo.jpeg"
 
 # Configure the OCaml $PATH cleverly '/home/lilian/.opam/4.14.1/bin/ocaml'
-# TODO: be independant of the installed version of OCaml and Opam...
+# TODO: be independent of the installed version of OCaml and Opam...
 OCAML_INTERPRETER_PATH: Final[Path] = Path.home() / '.opam' / '4.14.1' / 'bin' / 'ocaml'
+OCAML_COMPILER_PATH: Final[Path] = OCAML_INTERPRETER_PATH.parent / 'ocamlopt'
 
 # Preferred filenames are checked first before falling back to broader glob searches.
 CODE_CANDIDATES: Final[tuple[str, ...]] = ("code_rendu.c", "lib.h", "lib.c", "main.c", "code_rendu.ml", "main.ml")
@@ -396,6 +399,33 @@ def run_command_and_capture_output(
     log_path.write_text(output, encoding="utf-8")
     read_text_file.clear()
     return exit_code, output
+
+
+def run_nsjail_command_and_capture_output(
+    command: Sequence[str | Path], cwd: Path, log_path: Path, input_path=None, timeout=60
+) -> tuple[int, str]:
+    """Run one command through NsJail, save its output, and return the exit code plus output."""
+    command_parts = [str(part) for part in command]
+    if command_parts:
+        executable = command_parts[0]
+        if "/" not in executable:
+            resolved_executable = shutil.which(executable)
+            if resolved_executable is not None:
+                command_parts[0] = resolved_executable
+
+    path_env = os.environ.get("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+    home_env = os.environ.get("HOME", str(Path.home()))
+    nsjail_command: list[str | Path] = [
+        "nsjail",
+        "--config", NSJAIL_CONFIG_PATH,
+        "--env", f"PATH={path_env}",
+        "--env", f"HOME={home_env}",
+        "--",
+    ]
+    nsjail_command.extend(command_parts)
+    return run_command_and_capture_output(
+        nsjail_command, cwd=cwd, log_path=log_path, input_path=input_path, timeout=timeout
+    )
 
 
 def normalize_output_piece(value: object) -> str:
@@ -984,8 +1014,8 @@ def compile_ocaml_submission(
 ) -> tuple[int, Path, Path, str]:
     """Compile one OCaml submission and persist the compiler output."""
     log_path = get_ocaml_compile_log_path(student_dir)
-    exit_code, output = run_command_and_capture_output(
-        ["ocamlopt", "-color", "never", "-ccopt", "-static", "-o", str(compiled_exe_path), code_path.name],
+    exit_code, output = run_nsjail_command_and_capture_output(
+        [str(OCAML_COMPILER_PATH), "-color", "never", "-ccopt", "-static", "-o", str(compiled_exe_path), str(code_path)],
         cwd=student_dir,
         log_path=log_path,
     )
@@ -1000,19 +1030,40 @@ def compile_c_submission(
 
     tests_dir = get_c_tests_dir(tp_name)
     tests_dir.mkdir(parents=True, exist_ok=True)
+    ensure_c_tests_makefile(tp_name)
     copy_c_submission_files_to_tests_dir(code_paths, tests_dir)
+
+    workspace_path = Path("/tmp") / (
+        f"criterion_build__{slugify_for_filename(tp_name)}__{slugify_for_filename(student_dir.name)}"
+    )
+    if workspace_path.exists():
+        shutil.rmtree(workspace_path)
+    workspace_path.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(get_c_test_makefile_path(tp_name), workspace_path / "Makefile")
+    for code_path in code_paths:
+        shutil.copy2(code_path, workspace_path / code_path.name)
 
     command = [
         "make", "-B",
+        "-C", str(workspace_path),
         "main.exe"
         # "all"
     ]
-    exit_code, output = run_command_and_capture_output(
+    exit_code, output = run_nsjail_command_and_capture_output(
         command,
         cwd=tests_dir,
         log_path=log_path,
+        timeout=120,
     )
-    shutil.copy2(tests_dir / "main.exe", compiled_exe_path)
+    built_exe_path = workspace_path / "main.exe"
+    if built_exe_path.exists():
+        shutil.copy2(built_exe_path, compiled_exe_path)
+    elif exit_code == 0:
+        output = output.rstrip() + "\n\n[Erreur : compilation déclarée réussie mais binaire main.exe introuvable]\n"
+        log_path.write_text(output, encoding="utf-8")
+        read_text_file.clear()
+        exit_code = 1
     return exit_code, compiled_exe_path, log_path, output
 
 
@@ -1021,9 +1072,8 @@ def interpret_ocaml_submission_in_nsjail(
 ) -> tuple[int, Path, str]:
     """Interpret one OCaml submission and persist the interpreter output."""
     log_path = get_ocaml_interpret_log_path(student_dir)
-    nsjail_config = ROOT_DIR / "nsjail_config.cfg"
-    exit_code, output = run_command_and_capture_output(
-        ["nsjail", "--config", str(nsjail_config), "--", str(OCAML_INTERPRETER_PATH), "-color", "never"],
+    exit_code, output = run_nsjail_command_and_capture_output(
+        [str(OCAML_INTERPRETER_PATH), "-color", "never"],
         cwd=student_dir,
         log_path=log_path,
         input_path=code_path,
@@ -1034,9 +1084,8 @@ def interpret_ocaml_submission_in_nsjail(
 def run_ocaml_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -> tuple[int, Path, str]:
     """Run one compiled OCaml binary inside NsJail and persist the output."""
     log_path = get_ocaml_exec_log_path(student_dir)
-    nsjail_config = ROOT_DIR / "nsjail_config.cfg"
-    exit_code, output = run_command_and_capture_output(
-        ["nsjail", "--config", str(nsjail_config), "--", str(compiled_exe_path)],
+    exit_code, output = run_nsjail_command_and_capture_output(
+        [str(compiled_exe_path)],
         cwd=student_dir,
         log_path=log_path,
     )
@@ -1046,17 +1095,8 @@ def run_ocaml_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -
 def run_c_submission_in_nsjail(student_dir: Path, compiled_exe_path: Path) -> tuple[int, Path, str]:
     """Run one compiled C binary inside NsJail and persist the output."""
     log_path = get_c_exec_log_path(student_dir)
-    nsjail_config = ROOT_DIR / "nsjail_config.cfg"
-    exit_code, output = run_command_and_capture_output(
-        [
-            "nsjail",
-            "--config", str(nsjail_config),
-            "--",
-            str(compiled_exe_path),
-            # "make",
-            # "-B",
-            # "run",
-        ],
+    exit_code, output = run_nsjail_command_and_capture_output(
+        [str(compiled_exe_path)],
         cwd=student_dir,
         log_path=log_path,
     )
@@ -2449,7 +2489,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
         with c_tools_tabs[1]:
             st.write("Compiler les fichiers C rendus, sans exécuter directement le binaire ainsi produit.")
             compile_button_key = f"c_compile_button::{tp_name}::{selected_student_name}"
-            if st.button("Compiler les rendus C (avec gcc)", key=compile_button_key, type="primary", width='stretch'):
+            if st.button("Compiler les rendus C (gcc dans NsJail)", key=compile_button_key, type="primary", width='stretch'):
                 exit_code, compiled_exe_path, log_path, output = compile_c_submission(selected_student_dir, code_paths if code_paths else [code_path], compiled_exe_path, tp_name)
                 if exit_code == 0:
                     st.success(f"Compilation réussie, terminée avec succès, le binaire est disponible dans {compiled_exe_path}.")
@@ -2583,7 +2623,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
         with ocaml_tools_tabs[0]:
             st.write("Compiler le fichier OCaml rendu, mais sans prendre encore le risque de lancer le binaire (il faut rester un peu prudent).")
             compile_button_key = f"ocaml_compile_button::{tp_name}::{selected_student_name}"
-            if st.button("Compiler le rendu OCaml (ocamlopt)", key=compile_button_key, type="primary", width='stretch'):
+            if st.button("Compiler le rendu OCaml (ocamlopt dans NsJail)", key=compile_button_key, type="primary", width='stretch'):
                 exit_code, compiled_exe_path, log_path, output = compile_ocaml_submission(selected_student_dir, code_path, compiled_exe_path)
                 if exit_code == 0:
                     st.success(f"Compilation réussie, terminée avec succès, le binaire est disponible dans {compiled_exe_path}.")
