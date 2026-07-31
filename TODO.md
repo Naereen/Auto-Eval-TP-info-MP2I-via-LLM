@@ -21,9 +21,9 @@ ocamlopt -ccopt -static -o /tmp/test_ocaml.exe ./code_rendu.ml
 nsjail --config ./nsjail_config.cfg -- /tmp/test_ocaml.exe
 ```
 
-- [ ] faire aussi la compilation `ocamlopt` derrière la "safe sandbox" de nsjail ?
+- [x] faire aussi la compilation `ocamlopt` derrière la "safe sandbox" de nsjail ?
 - [ ] faire aussi la compilation `ocamlc` derrière la "safe sandbox" de nsjail ?
-- [ ] faire aussi l'interprértation (terminal `ocaml`) derrière la "safe sandbox" de nsjail ?
+- [x] faire aussi l'interprétation (terminal `ocaml`) derrière la "safe sandbox" de nsjail ?
 
 #### Pour le C ?
 
@@ -32,7 +32,7 @@ gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_r
 nsjail --config ./nsjail_config.cfg -- /tmp/test_c.exe
 ```
 
-TODO: faire aussi la compilation `gcc` derrière la "safe sandbox" de nsjail ?
+- [x] faire aussi la compilation `gcc` derrière la "safe sandbox" de nsjail ?
 
 ### 2) Supporter des fichiers de tests, fournis préalablement et écrits à la main (par AlcoTesT/QCheck en OCaml, et AFL++ et Criterion en C)
 
