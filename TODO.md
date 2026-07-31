@@ -22,7 +22,7 @@ nsjail --config ./nsjail_config.cfg -- /tmp/test_ocaml.exe
 ```
 
 - [x] faire aussi la compilation `ocamlopt` derrière la "safe sandbox" de nsjail ?
-- [ ] faire aussi la compilation `ocamlc` derrière la "safe sandbox" de nsjail ?
+- [ ] faire aussi la compilation `ocamlc` ? Je n'en fais pas pour l'instant, par choix. Si je l'ajoute, la faire derrière la "safe sandbox" de nsjail ?
 - [x] faire aussi l'interprétation (terminal `ocaml`) derrière la "safe sandbox" de nsjail ?
 
 #### Pour le C ?
@@ -40,7 +40,7 @@ nsjail --config ./nsjail_config.cfg -- /tmp/test_c.exe
 
 Un premier exemple est maintenant présent pour `rendus-des-etudiants/03-types-polymorphes-etc-ocaml/dune_tests/`, avec `dune`, `alcotest`, `qcheck` et `qcheck-alcotest`.
 
-Le dashboard permet déjà, pour un rendu OCaml sélectionné (un étudiant fixé), de compiler le fichier, de l'exécuter dans [NsJail](https://nsjail.dev/) (un outil de "sandbox sécurisée"), et de lancer les tests OCaml (qui fonctionnent avec Dune, Alcotest et QCheck) préparés à la main, tout en conservant et en affichant joliment les logs.
+Le dashboard permet déjà, pour un rendu OCaml sélectionné (un étudiant fixé), de compiler le fichier, de l'exécuter dans [NsJail](https://nsjail.dev/) (un outil de "sandbox sécurisée"), et de lancer les tests OCaml (qui fonctionnent avec Dune, Alcotest et QCheck) préparés à la main (ou via IA), tout en conservant et en affichant joliment les logs.
 
 - [ ] Généraliser cette infrastructure de tests OCaml aux autres rendus et autres TP.
 
@@ -51,7 +51,7 @@ nsjail --config ./nsjail_config.cfg -- ./test_ocaml.exe
 
 #### Pour le C ?
 
-- [x] intégrer Criterion
+- [x] intégrer Criterion : c'est okay
 - [ ] TODO: intégrer AFL++ ?? Est-ce que ça vaut vraiment le coup ? Cela semble complexe...
 
 ```bash

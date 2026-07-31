@@ -65,8 +65,9 @@ C_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
 C_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
 C_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
 
-C_TEST_SOURCE_FILENAME: Final[str] = "test_lib.c"
+C_TEST_SOURCE_FILENAME: Final[str] = "test_code_rendu.c"
 C_LIB_SOURCE_FILENAME: Final[str] = "lib.c"
+
 C_CRITERION_MAKEFILE_TEMPLATE: Final[str] = """
 all:	main.exe run
 
@@ -85,18 +86,19 @@ lib.o:  lib.c
 main.exe:  stack.o graph.o lib.o main.c
 	$(CC) $(CFLAGS) -o main.exe stack.o graph.o lib.o main.c
 
-test_lib.exe:  stack.o graph.o lib.o test_code_rendu.c
-	$(CC) $(CFLAGS) -o test_lib.exe stack.o graph.o lib.o test_lib.c $(LDFLAGS)
+test_code_rendu.exe:  stack.o graph.o lib.o test_code_rendu.c
+	$(CC) $(CFLAGS) -o test_code_rendu.exe stack.o graph.o lib.o test_code_rendu.c $(LDFLAGS)
 
 run_tests_criterion:	run_tests_criterion_nojson
-run_tests_criterion_nojson:	test_lib.exe
-	time ./test_lib.exe --verbose
-run_tests_criterion_json:	test_lib.exe
-	time ./test_lib.exe --verbose --json
+run_tests_criterion_nojson:	test_code_rendu.exe
+	time ./test_code_rendu.exe --verbose
+run_tests_criterion_json:	test_code_rendu.exe
+	time ./test_code_rendu.exe --verbose --json
 
 run:
     ./main.exe
 """
+
 
 DEFAULT_QUESTION_COUNT: Final[int] = 10
 DEFAULT_QUESTION_POINTS: Final[int] = 5
@@ -111,7 +113,7 @@ APP_MODES: Final[tuple[str, ...]] = (
     "5 - Progression annuelle individuelle",
 )
 
-SYSTEM_PROMPT = "Tu es une IA utile et extrêmement efficace, experte en informatique, en langue française. Je suis un professeur d'informatique en Classes Préparatoires CPGE, dans la filière MP2I, en France, et tu vas m'aider."
+SYSTEM_PROMPT = "Tu es une IA utile et extrêmement efficace, experte en science informatique (en langue française). Je suis un professeur d'informatique en Classes Préparatoires CPGE, dans la filière MP2I en France, et tu vas m'aider."
 
 
 # Typed payloads make the persisted JSON structures easier to reason about.
@@ -282,6 +284,7 @@ def discover_all_student_names() -> list[str]:
     student_names: set[str] = set()
     for tp_name in discover_tp_names():
         for student_dir in discover_student_dirs(tp_name):
+            # Ce filtre pourrait être inutile, on le garde au cas où...
             if student_dir.name in {DUNE_TESTS_DIR, CRITERION_TESTS_DIR}:
                 continue
             student_names.add(student_dir.name)
@@ -374,19 +377,21 @@ def run_command_and_capture_output(
         command_parts = [str(part) for part in command]
         input_file = None
         if input_path:
-            input_file = open(input_path, "r")
-        completed = subprocess.run(
-            command_parts,
-            cwd=cwd,
-            check=False,
-            stdin=input_file,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=timeout,
-        )
-        output = normalize_output_piece(completed.stdout)
-        exit_code = completed.returncode
+            with open(input_path, "r") as input_file:
+                completed = subprocess.run(
+                    command_parts,
+                    cwd=cwd,
+                    check=False,
+                    stdin=input_file,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=timeout,
+                )
+            output = normalize_output_piece(completed.stdout)
+            exit_code = completed.returncode
+        else:
+            return -1, "Erreur : aucun fichier d'entrée fourni pour la commande."
     except FileNotFoundError as exc:
         output = f"Commande introuvable : {exc}\n"
         exit_code = 127
@@ -414,8 +419,11 @@ def run_nsjail_command_and_capture_output(
             if resolved_executable is not None:
                 command_parts[0] = resolved_executable
 
+    # XXX: run_nsjail_command_and_capture_output est utile, mais le comportement dépend fortement de PATH/HOME hôte injectés tels quels (reproductibilité).
     path_env = os.environ.get("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+
     home_env = os.environ.get("HOME", str(Path.home()))
+
     nsjail_command: list[str | Path] = [
         "nsjail",
         "--config", NSJAIL_CONFIG_PATH,
@@ -2124,7 +2132,7 @@ Renvoie uniquement un JSON sous cette forme (par exemple) :
                 response = response_from_llm(
                     prompt=prompt,
                     system_prompt=system_prompt,
-                    paths_pdf=[subject_pdf],
+                    paths_pdf=[subject_pdf] if subject_pdf is not None else [],
                     paths_source=
                         tex_files
                         + markdown_files
@@ -2443,7 +2451,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                 if not code_path or code_path is None:
                     st.warning("Aucun fichier source rendu n'a été trouvé.")
                 elif code_paths:
-                    code_paths_tabs = st.tabs([str(one_code_path).split('/')[-1] for one_code_path in code_paths])
+                    code_paths_tabs = st.tabs([one_code_path.name for one_code_path in code_paths])
                     for one_tab, one_code_path in zip(code_paths_tabs, code_paths):
                         with one_tab:
                             code = read_text_file(str(one_code_path))
@@ -2498,7 +2506,10 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
         with c_tools_tabs[0]:
             st.write("Affichage du fichier Makefile qui sera utilisé pour savoir gérer la compilation des codes rendus par l'étudiant (.c et .h)")
             makefile_path = get_c_test_makefile_path(tp_name)
-            st.code(read_text_file(str(makefile_path)), language="makefile", line_numbers=True, wrap_lines=True, height=520)
+            if makefile_path:
+                st.code(read_text_file(str(makefile_path)), language="makefile", line_numbers=True, wrap_lines=True, height=520)
+            else:
+                st.warning("Aucun Makefile n'est encore disponible pour ce TP. Il sera généré automatiquement au premier lancement des tests.")
 
         with c_tools_tabs[1]:
             st.write("Compiler les fichiers C rendus, sans exécuter directement le binaire ainsi produit.")
@@ -2629,7 +2640,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                             set_tests_note_sur_20(tp_name, selected_student_name, None)
                             render_tests_note_metric(top_tests_note_metric, None)
                             st.warning("Aucune sortie JSON exploitable n'a été produite par les tests Criterion.")
-                    
+
     else:
         compiled_exe_path = get_ocaml_compiled_exe_path(tp_name, selected_student_name or "")
         ocaml_tools_tabs = st.tabs(["A - Compiler", "B - Interpréter dans la safebox", "C - Exécuter dans la safebox", "D - Tests complets"])
@@ -2659,9 +2670,9 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
             if st.button("Interpréter le rendu OCaml", key=interpret_button_key, type="primary", width='stretch'):
                 exit_code, log_path, output = interpret_ocaml_submission_in_nsjail(selected_student_dir, code_path)
                 if exit_code == 0:
-                    st.success(f"Interprétration réussie, terminée avec succès.")
+                    st.success(f"Interprétation réussie, terminée avec succès.")
                 else:
-                    st.warning(f"Interprétration échouée, terminée avec le code de retour {exit_code}.")
+                    st.warning(f"Interprétation échouée, terminée avec le code de retour {exit_code}.")
 
                 st.markdown("**Sortie de cette commande Bash (log)**")
                 # st.code(output, language="bash", line_numbers=True, wrap_lines=True)
@@ -2712,7 +2723,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                 if exit_code == 0:
                     st.success(f"Tests Dune terminés entièrement avec succès. Le rendu a été généré dans `{artifact_path.name}`.")
                 else:
-                    st.success(f"Tests Dune terminés avec une erreur, et le code de retour {exit_code}. Le rendu a-t-il été généré dans `{artifact_path.name}` ?")
+                    st.error(f"Tests Dune terminés avec une erreur, et le code de retour {exit_code}. Le rendu a-t-il été généré dans `{artifact_path.name}` ?")
 
                 # TODO: je veux aussi afficher le JSON ?
                 exit_code_json, log_path_json, artifact_path_json, output_json = run_ocaml_dune_tests(
@@ -3008,9 +3019,9 @@ def render_documentation_mode() -> None:
         1. Choisir le mode `1 - Barème` pour préparer le barème d'un TP.
         2. Vérifier le sujet affiché à gauche, puis renseigner ou essayer de générer un barème automatiquement (par appel à un LLM/AI) pour découvrir et noter les questions, et aussi calculer leurs points.
         3. Passer au mode `2.a - Génération automatisée de tests OCaml` pour préparer un banc de tests pour le langage OCaml (avec Dune/Alcotest/QCheck).
-        4. TODO: Passer au mode `2.b - Génération automatisée de tests C` pour préparer un banc de tests pour le langage C (avec Criterion).
+        4. Ou bien, passer au mode `2.b - Génération automatisée de tests C` pour préparer un banc de tests pour le langage C (avec Criterion).
         5. Passer au mode `3 - Évaluation des rendus` pour noter un étudiant question par question.
-        6. Sauvegarder les notes, puis consulter les synthèses dans les modes `4` et `5`.
+        6. Sauvegarder les notes, puis consulter les synthèses dans les modes `4` (vue de la classe par TP) et `5` (progression annuelle individuelle).
         """
     )
 
