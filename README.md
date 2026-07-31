@@ -227,7 +227,7 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py --server.port 8765
 ```
 
-Le dashboard s'ouvre tout seul, sur l'adresse http://localhost:8765/, puis découvre automatiquement les dossiers de TP et les rendus disponibles.
+Le dashboard s'ouvre tout seul, sur l'adresse <http://localhost:8765/>, puis découvre automatiquement les dossiers de TP et les rendus disponibles.
 
 ## Tests automatiques OCaml
 

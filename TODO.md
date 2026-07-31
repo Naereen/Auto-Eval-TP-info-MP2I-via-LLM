@@ -32,7 +32,7 @@ gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_r
 nsjail --config ./nsjail_config.cfg -- /tmp/test_c.exe
 ```
 
-TODO: faire aussi la compilation `gcc` derrière la "safe sandbox" de nsjail ?
+- [ ] faire aussi la compilation `gcc` derrière la "safe sandbox" de nsjail ?
 
 ### 2) Supporter des fichiers de tests, fournis préalablement et écrits à la main (par AlcoTesT/QCheck en OCaml, et AFL++ et Criterion en C)
 
@@ -51,8 +51,8 @@ nsjail --config ./nsjail_config.cfg -- ./test_ocaml.exe
 
 #### Pour le C ?
 
-- [ ] TODO: intégrer Criterion
-- [ ] TODO: intégrer AFL++ ??
+- [x] intégrer Criterion
+- [ ] TODO: intégrer AFL++ ?? Est-ce que ça vaut vraiment le coup ? Cela semble complexe...
 
 ```bash
 gcc -Wall -Wextra -Wvla -fsanitize=address,undefined -o /tmp/test_c.exe ./code_rendu.c -lm
