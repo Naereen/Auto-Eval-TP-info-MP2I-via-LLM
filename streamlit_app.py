@@ -66,6 +66,7 @@ C_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
 C_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
 
 C_TEST_SOURCE_FILENAME: Final[str] = "test_lib.c"
+C_LIB_SOURCE_FILENAME: Final[str] = "lib.c"
 C_CRITERION_MAKEFILE_TEMPLATE: Final[str] = """
 all:	main.exe run
 
@@ -611,6 +612,16 @@ def get_c_test_makefile_path(tp_name: str) -> Path:
     return get_c_tests_dir(tp_name) / "Makefile"
 
 
+def get_c_test_dependency_code_paths(tp_name: str) -> list[Path]:
+    """Return the path of all the .c / .h files used to run Criterion for one TP."""
+    tests_dir = get_c_tests_dir(tp_name)
+    dependency_paths = []
+    for path in tests_dir.iterdir():
+        if path.suffix in (".c", ".h", ".cpp", ".hpp") and path.name not in (C_TEST_SOURCE_FILENAME, C_LIB_SOURCE_FILENAME):
+            dependency_paths.append(path)
+    return dependency_paths
+
+
 def get_c_test_generation_llm_response_key(tp_name: str) -> str:
     """Return the session key used to store the last AI-generated Criterion test suite response."""
     return f"c_tests_llm_response::{tp_name}"
@@ -1041,6 +1052,8 @@ def compile_c_submission(
     workspace_path.mkdir(parents=True, exist_ok=True)
 
     shutil.copy2(get_c_test_makefile_path(tp_name), workspace_path / "Makefile")
+    for dependency_code_path in get_c_test_dependency_code_paths(tp_name):
+        shutil.copy2(dependency_code_path, workspace_path / dependency_code_path.name)
     for code_path in code_paths:
         shutil.copy2(code_path, workspace_path / code_path.name)
 
@@ -1053,6 +1066,7 @@ def compile_c_submission(
     exit_code, output = run_nsjail_command_and_capture_output(
         command,
         cwd=tests_dir,
+        # cwd=workspace_path,
         log_path=log_path,
         timeout=120,
     )
