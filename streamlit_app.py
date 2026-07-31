@@ -2011,9 +2011,9 @@ def render_pdf(path: Path, height: int = 720) -> None:
 
 def detect_language(path: Path) -> str:
     """Map supported source file extensions to Streamlit syntax highlighters."""
-    if path.suffix == ".c":
+    if path.suffix in [".c", ".h", ".cpp", ".hpp"]:
         return "c"
-    if path.suffix == ".ml":
+    if path.suffix in [".ml", ".mli", ".mll", ".mly"]:
         return "ocaml"
     return "text"
 
