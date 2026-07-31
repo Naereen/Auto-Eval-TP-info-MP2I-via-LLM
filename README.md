@@ -1,18 +1,21 @@
-# Auto Évaluation de TP d'informatique (en MP2I), via LLM
+# "Auto Évaluateur" de TP d'informatique (en MP2I), via LLM
 
-> **Expérimentation** : peut-on construire rapidement un outil d'aide à l'évaluation de rendus (code + md/PDF) de TP notés, en classe de MP2I, qui évaluerait une partie du code via des appels à LLM ? Via le service [ILASS](https://www.ilaas.fr/) et des modèles open-weight tels que [gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b), ou via Google AI's Gemini.
+> **Expérimentation** : peut-on construire "rapidement" un outil d'aide à l'évaluation de rendus de TP notés d'informatique (code OCaml/C + rapport md/PDF), en classe de prépa MP2I, qui évaluerait en partie les codes des étudiants via des appels à LLM ?
+> Via le service [ILASS](https://www.ilaas.fr/) et des modèles open-weight tels que [OpenAI's `gpt-oss-120b`](https://huggingface.co/openai/gpt-oss-120b), ou via [Google AI's Gemini](https://gemini.google.com/).
+
+==> **Réponse : oui !**
 
 ## Objectif
 
 Ce dépôt contient un dashboard Streamlit destiné à aider un enseignant à :
 
 - parcourir les sujets de TP disponibles ;
-- consulter les rendus étudiants ;
-- construire un barème par TP ;
-- générer automatiquement un banc de tests OCaml quand aucun `test_code_rendu.ml` n'est encore présent ;
-- saisir ou pré-remplir une notation ;
+- consulter les rendus étudiants, pour un TP donné ;
+- construire un barème par TP (à la main ou par un appel à une IA / LLM) ;
+- générer automatiquement un banc de tests OCaml quand aucun `test_code_rendu.ml` n'est encore présent - idem pour le langage C ;
+- saisir ou pré-remplir une notation, par étudiant par TP (ou la générer par IA/LLM) ;
 - sauvegarder les évaluations ;
-- visualiser des statistiques à l'échelle d'un TP ou d'un étudiant.
+- visualiser des statistiques à l'échelle de la classe pour un même TP, ou d'un étudiant pour tous les TP.
 
 ## Quel genre de sujets de TP et de rendus par étudiants ?
 
@@ -35,25 +38,25 @@ J'ai intégré un seul exemple d'un de mes petits sujets de TP, et de trois (fau
 Le dashboard permet de :
 
 - ouvrir un mode `0 - Documentation` directement dans l'application pour relire son fonctionnement ;
-- sélectionner un TP parmi ceux présents dans `sujets-de-travaux-pratiques` ;
+- sélectionner un TP parmi ceux présents dans le dossier local [`sujets-de-travaux-pratiques/`](sujets-de-travaux-pratiques/) ;
 - choisir un mode de travail dans la navigation latérale ;
 
 ### Mode `0 - Documentation`
 
-Le mode Documentation permet de :
+Le mode **0 - Documentation** permet de :
 
 - expliquer l'ordre conseillé d'utilisation du dashboard ;
 - rappeler le rôle de chaque mode ;
 - documenter les fichiers attendus dans le dépôt ;
 - préciser où sont sauvegardés `bareme.json` et `notes.json` ;
-- résumer la place des fonctionnalités d'assistance par IA dans le flux de travail.
+- résumer la place des fonctionnalités d'assistance par IA/LLM dans le flux de travail.
 
 ![documentation-mode-0-documentation-intégrée-1.png](./documentation-screenshots/documentation-mode-0-documentation-intégrée-1.png)
 ![documentation-mode-0-documentation-intégrée-2.png](./documentation-screenshots/documentation-mode-0-documentation-intégrée-2.png)
 
 ### Mode `1 - Barème`
 
-Le mode Barème permet de :
+Le mode **1 - Barème** permet de :
 
 - définir le nombre de questions pour le TP courant ;
 - attribuer jusqu'à 100 points par question ;
@@ -68,35 +71,35 @@ Le mode Barème permet de :
 ![documentation-mode-1-conception-barème-assisté-par-IA-1.png](./documentation-screenshots/documentation-mode-1-conception-barème-assisté-par-IA-1.png)
 ![documentation-mode-1-conception-barème-assisté-par-IA-3.png](./documentation-screenshots/documentation-mode-1-conception-barème-assisté-par-IA-3.png)
 
-### Mode `2 - Génération automatisée de tests OCaml`
+### Mode `2.a - Génération automatisée de tests OCaml`
 
-Le mode Génération automatisée de tests OCaml permet de :
+Le mode **2.a - Génération automatisée de tests OCaml** permet de :
 
 - préparer le dossier partagé `dune_tests/` du TP courant ;
 - détecter l'absence d'un fichier `test_code_rendu.ml` avant d'écrire quoi que ce soit ;
-- analyser le sujet, ses sources et le barème courant pour proposer un banc de tests OCaml ;
+- (par IA/LLM) analyser le sujet, ses sources et le barème courant pour proposer un banc de tests OCaml ;
 - générer un fichier `test_code_rendu.ml` compatible avec `dune`, `alcotest`, `qcheck` et `qcheck-alcotest` ;
 - créer au besoin le squelette Dune minimal via `dune` et `dune-project` ;
 - conserver les fichiers déjà présents dès qu'un banc de tests a été préparé à la main.
 
 ### Mode `2.b - Génération automatisée de tests C`
 
-Le mode Génération automatisée de tests C permet de :
+Le mode **2.b - Génération automatisée de tests C** permet de :
 
 - préparer le dossier partagé `criterion_tests/` du TP courant ;
-- détecter l'absence d'un fichier `test_code_rendu.c` avant d'écrire quoi que ce soit ;
-- analyser le sujet, ses sources et le barème courant pour proposer un banc de tests C ;
+- détecter l'absence d'un fichier `test_code_rendu.c` ou `Makefile`, avant d'écrire quoi que ce soit ;
+- (par IA/LLM) analyser le sujet, ses sources et le barème courant pour proposer un banc de tests C ;
 - générer un fichier `test_code_rendu.c` compatible avec Criterion ;
 - créer au besoin un `Makefile` minimal exposant `run_tests_criterion_nojson` et `run_tests_criterion_json` ;
 - conserver les fichiers déjà présents dès qu'un banc de tests a été préparé à la main.
 
 ### Mode `3 - Évaluation des rendus`
 
-Le mode Évaluation des rendus permet de :
+Le mode **3 - Évaluation des rendus** permet de :
 
 - sélectionner un rendu étudiant dans `rendus-des-etudiants/<tp>/` ;
 - afficher le code source rendu (`code_rendu.c` ou `code_rendu.ml`) avec coloration syntaxique ;
-- afficher le compte-rendu PDF de l'étudiant, avec repli sur le Markdown si le PDF n'existe pas encore ;
+- afficher le compte-rendu PDF de l'étudiant, avec repli sur le Markdown (s'il existe), si le PDF n'existe pas encore ;
 - utiliser le barème du TP pour saisir, question par question, les points attribués ;
 - calculer automatiquement le total obtenu et la note sur 20 ;
 - proposer une notation automatique par IA à partir du sujet, de ses sources, du `bareme.json`, du code rendu et du compte-rendu étudiant ;
@@ -104,16 +107,20 @@ Le mode Évaluation des rendus permet de :
 - sauvegarder la notation dans `rendus-des-etudiants/<tp>/<rendu>/notes.json` ;
 - recharger automatiquement cette notation lors d'une réouverture du rendu.
 
-Pour les rendus OCaml, ce mode ajoute aussi des actions à la demande, déclenchées uniquement par bouton : compilation dans NsJail, exécution du binaire dans NsJail, puis lancement des tests Dune préparés à la main avec sauvegarde des logs et du rendu HTML coloré.
+#### Pour les TP en OCaml
 
-Pour les rendus C, ce mode ajoute désormais des actions à la demande déclenchées uniquement par bouton : compilation avec `gcc` dans NsJail, exécution du binaire dans NsJail, puis copie du rendu dans `criterion_tests/` et lancement des tests Criterion via `make run_tests_criterion_nojson` et `make run_tests_criterion_json`, avec conservation des logs, du rendu HTML et de la sortie JSON.
+Pour les rendus OCaml, ce mode ajoute aussi des actions à la demande, déclenchées uniquement par bouton : compilation avec `ocamlopt` dans [NsJail](https://nsjail.dev/), exécution du binaire dans [NsJail](https://nsjail.dev/), puis lancement des tests Dune préparés à la main avec sauvegarde des logs et du rendu HTML coloré.
+
+#### Pour les TP en C
+
+Pour les rendus C, ce mode ajoute aussi des actions à la demande déclenchées uniquement par bouton : compilation avec `gcc` dans [NsJail](https://nsjail.dev/), exécution du binaire dans [NsJail](https://nsjail.dev/), puis copie du rendu dans `criterion_tests/` et lancement des tests Criterion via `make run_tests_criterion_nojson` et `make run_tests_criterion_json`, avec conservation des logs, du rendu HTML et de la sortie JSON.
 
 ![documentation-mode-2-évaluation-rendus-par-étudiant-1.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-1.png)
 ![documentation-mode-2-évaluation-rendus-par-étudiant-2.png](./documentation-screenshots/documentation-mode-2-évaluation-rendus-par-étudiant-2.png)
 
 ### Mode `4 - Vue de la classe par TP`
 
-Le mode Vue de la classe par TP permet de :
+Le mode **4 Vue de la classe par TP** permet de :
 
 - agréger les `notes.json` déjà sauvegardés pour le TP courant ;
 - afficher le nombre de rendus détectés, le nombre d'évaluations sauvegardées et les rendus encore en attente ;
@@ -125,7 +132,7 @@ Le mode Vue de la classe par TP permet de :
 
 ### Mode `5 - Progression annuelle individuelle`
 
-Le mode Progression annuelle individuelle permet de :
+Le mode **5 - Progression annuelle individuelle** permet de :
 
 - sélectionner un étudiant parmi tous les rendus détectés ;
 - agréger ses `notes.json` sur l'ensemble des TP ;
@@ -172,8 +179,8 @@ Le mode Progression annuelle individuelle permet de :
 
 - `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini, depuis le dashboard aussi !) ;
 
-- `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.ml` : fichier de tests OCaml généré ou entretenu par le mode `2 - Génération automatisée de tests OCaml` ;
-- `rendus-des-etudiants/<tp>/criterion_tests/test_code_rendu.c` et `criterion_tests/Makefile` : banc de tests C / Criterion généré ou entretenu par le mode `2.b - Génération automatisée de tests C` ;
+- `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.ml` : fichier de tests OCaml généré ou entretenu par le mode `2.a - Génération automatisée de tests OCaml` ;
+- `rendus-des-etudiants/<tp>/criterion_tests/test_code_rendu.c` et `rendus-des-etudiants/<tp>/criterion_tests/Makefile` : banc de tests C / Criterion généré ou entretenu par le mode `2.b - Génération automatisée de tests C` ;
 
 - `rendus-des-etudiants/<tp>/<rendu>/ocamlopt_code_rendu.log` et `exec_code_rendu.log` : logs de compilation et d'exécution pour les rendus OCaml évalués à la demande ;
 - `rendus-des-etudiants/<tp>/<rendu>/gcc_code_rendu.log` et `exec_code_rendu.log` : logs de compilation et d'exécution pour les rendus C évalués à la demande ;
@@ -211,7 +218,7 @@ Le mode Progression annuelle individuelle permet de :
 ## Documentation du projet
 
 - Les commentaires et docstrings dans le code Python sont rédigés en anglais, afin de garder une documentation technique homogène.
-- Les textes destinés à l'utilisateur final restent en français correct et accentué.
+- Les textes destinés à l'utilisateur final restent en français (correct et bien accentué).
 - `README.md` documente uniquement les fonctionnalités déjà présentes dans le projet.
 - `TODO.md` recense ce qu'il reste à implémenter, tester, fiabiliser ou corriger.
 - Toute évolution fonctionnelle du projet doit s'accompagner d'une mise à jour de la documentation pertinente dans ce dépôt.
@@ -229,6 +236,20 @@ streamlit run streamlit_app.py --server.port 8765
 
 Le dashboard s'ouvre tout seul, sur l'adresse <http://localhost:8765/>, puis découvre automatiquement les dossiers de TP et les rendus disponibles.
 
+### Dépendances
+
+Ce projet demande que la machine hôte ait les logiciels suivants installés :
+
+- `python`
+  - python packet `virtualenv`
+- `ocaml`
+  - `opam`
+  - `dune`
+- `gcc`
+  - avec `libasan`, `libubsan` (dev et utilisation)
+  - lib `criterion` dev et utilisation
+- `nsjail`
+
 ## Tests automatiques OCaml
 
 Un premier banc de tests automatiques OCaml est fourni pour le rendu [rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/).
@@ -242,7 +263,7 @@ cd rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1
 dune runtest
 ```
 
-Depuis le dashboard, le mode `2 - Génération automatisée de tests OCaml` peut produire automatiquement un `test_code_rendu.ml` quand il manque, puis le mode `3 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans [NsJail](https://nsjail.dev/), puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
+Depuis le dashboard, le mode `2.a - Génération automatisée de tests OCaml` peut produire automatiquement un `test_code_rendu.ml` quand il manque, puis le mode `3 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans [NsJail](https://nsjail.dev/), puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
 
 Le mode `2.b - Génération automatisée de tests C` peut de la même façon produire un `criterion_tests/test_code_rendu.c` et un `criterion_tests/Makefile`, puis le mode `3 - Évaluation des rendus` propose des boutons pour compiler le rendu C dans [NsJail](https://nsjail.dev/), l'exécuter dans [NsJail](https://nsjail.dev/) et lancer les tests Criterion via `make run_tests_criterion_nojson` ou `make run_tests_criterion_json`.
 

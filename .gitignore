@@ -224,3 +224,5 @@ __marimo__/
 *.out
 *.log
 *.html
+
+historique-des-prompts-utilises/

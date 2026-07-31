@@ -96,7 +96,7 @@ run_tests_criterion_json:	test_code_rendu.exe
 	time ./test_code_rendu.exe --verbose --json
 
 run:
-    ./main.exe
+	./main.exe
 """
 
 
@@ -2277,7 +2277,7 @@ def render_submissions_mode(tp_name: str) -> None:
     )
     col_rendus, col_etudiant, col_total, col_note, col_tests_note = st.columns(5)
     col_rendus.metric("**Nombre de rendus détectés**", len(student_dirs))
-    col_etudiant.metric("**Étudiant sélectionné**", f"**{selected_student_name}**" or "aucun")
+    col_etudiant.metric("**Étudiant sélectionné**", f"**{selected_student_name}**" if selected_student_name else "aucun")
     col_total.metric("**Points obtenus**", f"{total_points} / {total_points_bareme}")
     col_note.metric("**Note par lecture des rendus**", f"{note_sur_20}/20")
     top_tests_note_metric = col_tests_note.empty()
@@ -2448,7 +2448,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
             tabs = st.tabs(["Code(s) source", "Rapport PDF", "Compte-rendu (Markdown)", "Fichiers rendus"])
 
             with tabs[0]:
-                if not code_path or code_path is None:
+                if not code_path and not code_paths:
                     st.warning("Aucun fichier source rendu n'a été trouvé.")
                 elif code_paths:
                     code_paths_tabs = st.tabs([one_code_path.name for one_code_path in code_paths])
@@ -2506,7 +2506,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
         with c_tools_tabs[0]:
             st.write("Affichage du fichier Makefile qui sera utilisé pour savoir gérer la compilation des codes rendus par l'étudiant (.c et .h)")
             makefile_path = get_c_test_makefile_path(tp_name)
-            if makefile_path:
+            if makefile_path.exists():
                 st.code(read_text_file(str(makefile_path)), language="makefile", line_numbers=True, wrap_lines=True, height=520)
             else:
                 st.warning("Aucun Makefile n'est encore disponible pour ce TP. Il sera généré automatiquement au premier lancement des tests.")
