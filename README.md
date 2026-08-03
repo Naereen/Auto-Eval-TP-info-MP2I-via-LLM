@@ -77,7 +77,7 @@ Le mode **1 - Barème** permet de :
 Le mode **2 - Génération de copies simulées** permet de :
 
 - sélectionner un TP existant dans le dépôt ;
-- choisir un profil étudiant cible parmi `20_20`, `12_20`, `05_20` ;
+- choisir un profil étudiant cible parmi `MOCK_20_20`, `MOCK_12_20`, `MOCK_05_20` ;
 - prévisualiser et éditer le prompt final envoyé à Gemini avant exécution ;
 - choisir explicitement le modèle Gemini à utiliser ;
 - générer plusieurs fichiers réalistes (code source + compte-rendu Markdown) depuis une seule requête ;
@@ -193,7 +193,7 @@ Le mode **6 - Progression annuelle individuelle** permet de :
 
 - `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini, depuis le dashboard aussi !) ;
 
-- `rendus-des-etudiants/<tp>/<profil>/` : rendus synthétiques générés par le mode `2 - Génération de copies simulées` (exemples de profils : `20_20`, `12_20`, `05_20`) ;
+- `rendus-des-etudiants/<tp>/<profil>/` : rendus synthétiques générés par le mode `2 - Génération de copies simulées` (exemples de profils : `MOCK_20_20`, `MOCK_12_20`, `MOCK_05_20`) ;
 
 - `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.ml` : fichier de tests OCaml généré ou entretenu par le mode `3.a - Génération automatisée de tests OCaml` ;
 - `rendus-des-etudiants/<tp>/criterion_tests/test_code_rendu.c` et `rendus-des-etudiants/<tp>/criterion_tests/Makefile` : banc de tests C / Criterion généré ou entretenu par le mode `3.b - Génération automatisée de tests C` ;
@@ -279,7 +279,11 @@ cd rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1
 dune runtest
 ```
 
+### Générer automatiquement ce genre de tests, pour OCaml ?
+
 Depuis le dashboard, le mode `3.a - Génération automatisée de tests OCaml` peut produire automatiquement un `test_code_rendu.ml` quand il manque, puis le mode `4 - Évaluation des rendus` propose aussi des boutons pour compiler le rendu OCaml sélectionné, l'exécuter dans [NsJail](https://nsjail.dev/), puis copier le fichier dans `dune_tests/` et lancer les tests préparés à la main.
+
+### Ou générer automatiquement ce genre de tests, pour le C ?
 
 Le mode `3.b - Génération automatisée de tests C` peut de la même façon produire un `criterion_tests/test_code_rendu.c` et un `criterion_tests/Makefile`, puis le mode `4 - Évaluation des rendus` propose des boutons pour compiler le rendu C dans [NsJail](https://nsjail.dev/), l'exécuter dans [NsJail](https://nsjail.dev/) et lancer les tests Criterion via `make run_tests_criterion_nojson` ou `make run_tests_criterion_json`.
 
@@ -288,6 +292,7 @@ Le mode `3.b - Génération automatisée de tests C` peut de la même façon pro
 ## Feuille de route et vérifications restantes
 
 La liste des développements, tests et points de fiabilisation encore ouverts se trouve dans [`TODO.md`](./TODO.md).
+Ces deux fichiers de documentation sont partiellement maintenus à la main, partiellement par GitHub Copilot quand j'ajoute des fonctionnalités.
 
 ----
 
@@ -295,10 +300,12 @@ La liste des développements, tests et points de fiabilisation encore ouverts se
 
 [MIT Licensed](https://lbesson.mit-license.org/) (file [LICENSE](LICENSE)).
 © [Lilian Besson](https://GitHub.com/Naereen), 2026.
+Made for fun, not profit!
 
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/graphs/commit-activity)
 [![Ask Me Anything !](https://img.shields.io/badge/Ask%20me-anything-1abc9c.svg)](https://GitHub.com/Naereen/ama)
 
 [![ForTheBadge built-with-swag](http://ForTheBadge.com/images/badges/built-with-swag.svg)](https://GitHub.com/Naereen/)
+[![ForTheBadge built-with-python](https://forthebadge.com/images/badges/made-with-python.svg)](https://forthebadge.com)
 [![ForTheBadge uses-badges](http://ForTheBadge.com/images/badges/uses-badges.svg)](http://ForTheBadge.com)
 [![ForTheBadge uses-git](http://ForTheBadge.com/images/badges/uses-git.svg)](https://GitHub.com/)
