@@ -12,7 +12,7 @@ Ce dépôt contient un dashboard Streamlit destiné à aider un enseignant à :
 - parcourir les sujets de TP disponibles ;
 - consulter les rendus étudiants, pour un TP donné ;
 - construire un barème par TP (à la main ou par un appel à une IA / LLM) ;
-- générer des rendus étudiants simulés (code + compte-rendu) par profils de niveau pour les benchmarks ;
+- générer des rendus étudiants simulés (code + compte-rendu) par profils de niveau pour les benchmarks (trois profils par défaut : correction parfaite qui mérite un 20/20, élève au niveau correct qui mérite un 12/20, et rendu insuffissant qui mérite un 05/20) ;
 - générer automatiquement un banc de tests OCaml quand aucun `test_code_rendu.ml` n'est encore présent - idem pour le langage C ;
 - saisir ou pré-remplir une notation, par étudiant par TP (ou la générer par IA/LLM) ;
 - sauvegarder les évaluations ;

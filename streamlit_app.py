@@ -2152,13 +2152,21 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
     if prompt_editor_key not in st.session_state:
         st.session_state[prompt_editor_key] = default_prompt
 
-    with st.expander("4) Prompt envoyé à Gemini (*éditable avant génération*)", expanded=True):
-        st.text_area(
-            "Prompt de génération",
-            key=prompt_editor_key,
-            height=360,
-            help="Vous pouvez adapter ce prompt avant de lancer la génération.",
-        )
+    # Render the subject panel and prompt editor side by side.
+    subject_col, prompt_col = st.columns((1.1, 1), gap="large")
+
+    with subject_col:
+        render_subject_panel(selected_tp, height=600)
+
+    with prompt_col:
+        st.subheader("Prompt pour l'IA ✨")
+        with st.expander("4) Prompt envoyé à Gemini (*éditable avant génération*)", expanded=True):
+            st.text_area(
+                "Prompt de génération",
+                key=prompt_editor_key,
+                height=600,
+                help="Vous pouvez adapter ce prompt avant de lancer la génération.",
+            )
 
     if st.button("""✨ Générer la "fausse" copie ✨""", width="stretch"):
         prompt_to_send = st.session_state.get(prompt_editor_key, default_prompt)
