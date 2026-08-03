@@ -417,7 +417,18 @@ def run_command_and_capture_output(
             output = normalize_output_piece(completed.stdout)
             exit_code = completed.returncode
         else:
-            return -1, "Erreur : aucun fichier d'entrée fourni pour la commande."
+            completed = subprocess.run(
+                command_parts,
+                cwd=cwd,
+                check=False,
+                # stdin=input_file,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=timeout,
+            )
+            output = normalize_output_piece(completed.stdout)
+            exit_code = completed.returncode
     except FileNotFoundError as exc:
         output = f"Commande introuvable : {exc}\n"
         exit_code = 127
@@ -823,7 +834,7 @@ Le résultat doit constituer un banc de très nombreux tests sérieux, pédagogi
                 ]
 
             source_paths: list[Path] = list(tex_files) + list(markdown_files)
-            with st.spinner("Génération du fichier de tests C en cours grâce à l'IA..."):
+            with st.spinner("Génération du fichier de tests C en cours grâce à l'IA...", show_time=True):
                 response = response_from_llm(
                     prompt=prompt,
                     system_prompt=system_prompt,
@@ -994,7 +1005,7 @@ Le résultat doit constituer un banc de TRÈS NOMBREUX tests sérieux, vraiment 
                 ]
 
             source_paths: list[Path] = list(tex_files) + list(markdown_files)
-            with st.spinner("Génération du fichier de tests en cours grâce à l'IA..."):
+            with st.spinner("Génération du fichier de tests OCaml en cours grâce à l'IA...", show_time=True):
                 response = response_from_llm(
                     prompt=prompt,
                     system_prompt=system_prompt,
@@ -2127,6 +2138,13 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
         key="mock_submission_selected_tp",
     )
 
+    selected_model = st.sidebar.selectbox(
+        "Choisir le modèle Gemini",
+        MOCK_MODELS,
+        index=0,
+        key="mock_submission_selected_model",
+    )
+
     profile_labels = {
         profile_key: f"**{profile_key}** - {profile_description}"
         for profile_key, profile_description in MOCK_PROFILE_OPTIONS
@@ -2137,13 +2155,6 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
         format_func=lambda profile_key: profile_labels.get(profile_key, profile_key),
         horizontal=False,
         key="mock_submission_selected_profile",
-    )
-
-    selected_model = st.sidebar.selectbox(
-        "Choisir le modèle Gemini",
-        MOCK_MODELS,
-        index=0,
-        key="mock_submission_selected_model",
     )
 
     subject_text = build_subject_text_for_mock_generation(selected_tp)
@@ -2173,7 +2184,7 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
         if not isinstance(prompt_to_send, str) or not prompt_to_send.strip():
             st.error("Le prompt est vide. Merci de renseigner un prompt avant de lancer la génération.")
         else:
-            with st.spinner("Génération de la copie simulée en cours via Gemini..."):
+            with st.spinner("Génération de la copie simulée en cours via Gemini...", show_time=True):
                 try:
                     response_text = call_gemini_api(prompt=prompt_to_send, model_name=selected_model)
                     extracted_files = extract_files_from_markdown(response_text)
@@ -2423,7 +2434,7 @@ Renvoie uniquement un JSON sous cette forme (par exemple) :
             tex_files = find_subject_tex_files(tp_name)
             markdown_files = find_subject_markdown_files(tp_name)
 
-            with st.spinner("Génération du barème en cours grâce à l'IA..."):
+            with st.spinner("Génération du barème en cours grâce à l'IA...", show_time=True):
                 response = response_from_llm(
                     prompt=prompt,
                     system_prompt=system_prompt,
@@ -2649,7 +2660,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                             "Barème JSON courant :\n" + json.dumps(bareme_data, ensure_ascii=False, indent=2)
                         ]
 
-                    with st.spinner("Génération de l'évaluation de ce rendu de TP, en cours grâce à l'IA ..."):
+                    with st.spinner("Génération de l'évaluation de ce rendu de TP, en cours grâce à l'IA ...", show_time=True):
                         response = response_from_llm(
                             prompt=prompt,
                             system_prompt=system_prompt,

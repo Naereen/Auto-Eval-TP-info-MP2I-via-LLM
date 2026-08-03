@@ -41,7 +41,7 @@ def _read_api_key() -> str:
     )
 
 
-def call_gemini_api(prompt: str, model_name: str = "gemini-1.5-pro") -> str:
+def call_gemini_api(prompt: str, model_name: str = "gemini-flash-latest") -> str:
     """Call Google Gemini and return the plain text response."""
     if not prompt.strip():
         raise ValueError("The prompt cannot be empty.")

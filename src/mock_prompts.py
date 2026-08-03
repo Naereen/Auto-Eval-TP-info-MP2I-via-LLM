@@ -37,7 +37,7 @@ PROMPTS_PROFILES: Final[dict[str, dict[str, str]]] = {
         "label": "Moyen (12/20)",
         "instructions": (
             "Generate a realistic mid-level submission: the beginning is mostly correct, "
-            "but the last 2 to 3 questions are incomplete or missing due to lack of time. "
+            "but the last 2 to 3 problems/exercises/questions should be incomplete or missing (due to lack of time). "
             "The code must remain compilable and readable, with minor weaknesses such as "
             "light testing and occasionally suboptimal complexity choices."
         ),
@@ -45,7 +45,7 @@ PROMPTS_PROFILES: Final[dict[str, dict[str, str]]] = {
     "MOCK_05_20": {
         "label": "Faible (05/20)",
         "instructions": (
-            "Generate a weak but plausible submission: only the first 2 to 3 basic questions are attempted. "
+            "Generate a weak but plausible submission: only the first 2 to 3 basic exercises/problems/questions are attempted. "
             "The implementation can be naive and very incomplete. "
             "Absolute constraint: the source code must compile without syntax errors. "
             "Do not return intentionally broken syntax."
