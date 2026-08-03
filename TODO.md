@@ -62,6 +62,14 @@ nsjail --config ./nsjail_config.cfg -- ./test_c.exe
 
 ----
 
+## Générer automatiquement (au moins) trois fausses réponses simulées, pour un TP donné
+
+- [x] Prototype du générateur de copies simulées livré dans le mode `2 - Générateur de Copies Simulées`.
+- [ ] Ajouter davantage de profils de simulation (au-delà de `20_20`, `12_20`, `05_20`).
+- [ ] Ajouter un mode de génération par lot (N copies par profil) avec suffixes de dossiers pour éviter les collisions.
+
+----
+
 ## À fiabiliser ou corriger (pas urgent)
 
 - [ ] Affiner la génération automatique du barème par LLM/IA à partir du sujet LaTeX, Markdown ou PDF.
@@ -84,11 +92,20 @@ Rien ?
 
 ## Tester le mode Génération automatisée de tests OCaml
 
-- [ ] Vérifier que le mode `2 - Génération automatisée de tests OCaml` reste accessible pour un TP OCaml même si aucun `test_code_rendu.ml` n'existe encore.
+- [ ] Vérifier que le mode `3.a - Génération automatisée de tests OCaml` reste accessible pour un TP OCaml même si aucun `test_code_rendu.ml` n'existe encore.
 - [ ] Vérifier que la génération IA écrit bien `dune_tests/test_code_rendu.ml` sans écraser un fichier existant.
 - [ ] Vérifier que les fichiers `dune` et `dune-project` sont créés ou conservés correctement dans `dune_tests/`.
 - [ ] Vérifier que la prévisualisation du fichier de tests généré reste lisible après sauvegarde.
 - [ ] Vérifier que le mode refuse de réécrire un banc de tests déjà préparé à la main.
+
+## Tester le mode Générateur de Copies Simulées
+
+- [ ] Vérifier que le mode `2 - Générateur de Copies Simulées` permet de sélectionner un TP existant.
+- [ ] Vérifier que le mode propose les trois profils `20_20`, `12_20`, `05_20` avec description explicite.
+- [ ] Vérifier que le prompt pré-rempli est éditable avant envoi vers Gemini.
+- [ ] Vérifier que la prévisualisation affiche bien tous les fichiers extraits de la réponse Gemini.
+- [ ] Vérifier que la sauvegarde en destination `rendus-des-etudiants/<tp>/<profil>/` fonctionne.
+- [ ] Vérifier que l'écrasement de fichiers existants exige bien une double confirmation explicite.
 
 ## Tester le mode Barème
 

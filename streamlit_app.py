@@ -25,6 +25,8 @@ import streamlit as st
 
 # Local module
 from gemini_requests import response_from_llm, help_credits_llm
+from src.mock_generator import call_gemini_api, extract_files_from_markdown, save_mock_submission
+from src.mock_prompts import PROMPTS_PROFILES, build_generation_prompt
 
 
 # Repository layout and default values used across all dashboard modes.
@@ -106,11 +108,35 @@ DEFAULT_QUESTION_POINTS: Final[int] = 5
 APP_MODES: Final[tuple[str, ...]] = (
     "0 - Documentation",
     "1 - Barème",
-    "2.a - Génération IA de tests OCaml",
-    "2.b - Génération IA de tests C",
-    "3 - Évaluation des rendus",
-    "4 - Vue de la classe par TP",
-    "5 - Progression annuelle individuelle",
+    "2 - Générateur de Copies Simulées",
+    "3.a - Génération IA de tests OCaml",
+    "3.b - Génération IA de tests C",
+    "4 - Évaluation des rendus",
+    "5 - Vue de la classe par TP",
+    "6 - Progression annuelle individuelle",
+)
+
+MOCK_PROFILE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    (
+        "MOCK_20_20",
+        "20/20 (Excellent) : rendu complet, robuste, tests unitaires présents, complexités optimisées, assertions et zéro fuite mémoire.",
+    ),
+    (
+        "MOCK_12_20",
+        "12/20 (Moyen) : début du TP solide, mais 2-3 dernières questions absentes ; code compilable avec quelques choix sous-optimaux.",
+    ),
+    (
+        "MOCK_05_20",
+        "05/20 (Faible) : seules les premières questions sont tentées ; code incomplet/naif mais compilable sans erreur de syntaxe.",
+    ),
+)
+
+MOCK_MODELS: Final[tuple[str, ...]] = (
+    "gemini-flash-latest",
+    "gemini-pro-latest",
+    # "gemini-1.5-pro",
+    # "gemini-2.0-flash",
+    # "gemini-1.5-flash",
 )
 
 SYSTEM_PROMPT = "Tu es une IA utile et extrêmement efficace, experte en science informatique (en langue française). Je suis un professeur d'informatique en Classes Préparatoires CPGE, dans la filière MP2I en France, et tu vas m'aider."
@@ -2008,6 +2034,265 @@ def update_all_question_points(tp_name: str, points: int) -> dict[str, object]:
     return set_bareme_data(tp_name, updated_bareme)
 
 
+def get_mock_generation_data_key() -> str:
+    """Return the session key used to store the latest generated mock submission."""
+    return "mock_submission::generated_data"
+
+
+def get_mock_overwrite_confirmation_key(tp_name: str, profile_key: str) -> str:
+    """Return the session key controlling overwrite confirmation for one target directory."""
+    return f"mock_submission::overwrite_confirmed::{tp_name}::{profile_key}"
+
+
+def get_mock_prompt_editor_key(tp_name: str, profile_key: str) -> str:
+    """Return the session key used to edit one assembled prompt."""
+    return f"mock_submission::prompt_editor::{tp_name}::{profile_key}"
+
+
+def build_subject_text_for_mock_generation(tp_name: str) -> str:
+    """Assemble a compact textual representation of one TP subject for LLM generation."""
+    sections: list[str] = [f"TP: {tp_name}"]
+    subject_dir = get_subject_dir(tp_name)
+    subject_pdf = find_subject_pdf(tp_name)
+    tex_files = find_subject_tex_files(tp_name)
+    markdown_files = find_subject_markdown_files(tp_name)
+    bareme_path = get_bareme_path(tp_name)
+
+    # TODO: how to add the PDF subject as an attached document?
+    # if subject_pdf is not None:
+    #     sections.append(f"PDF subject available at: {subject_pdf}")
+
+    if bareme_path.exists():
+        try:
+            sections.append("Current barème JSON:")
+            sections.append(read_text_file(str(bareme_path)))
+        except OSError:
+            sections.append("Current barème JSON could not be loaded.")
+
+    if markdown_files:
+        for markdown_path in markdown_files:
+            try:
+                markdown_content = read_text_file(str(markdown_path))
+            except OSError:
+                continue
+            sections.append(f"Markdown source: {markdown_path.name}")
+            sections.append(markdown_content)
+
+    if tex_files:
+        for tex_path in tex_files:
+            try:
+                tex_content = read_text_file(str(tex_path))
+            except OSError:
+                continue
+            sections.append(f"LaTeX source: {tex_path.name}")
+            sections.append(tex_content)
+
+    if not markdown_files and not tex_files:
+        sections.append(
+            "No Markdown/LaTeX source found in the subject folder. Infer content from directory metadata and any provided barème."
+        )
+
+    sections.append(f"Subject directory path: {subject_dir}")
+
+    assembled = "\n\n".join(sections)
+    max_chars = 120_000
+    if len(assembled) > max_chars:
+        return assembled[:max_chars] + "\n\n[TRUNCATED SUBJECT CONTEXT]"
+    return assembled
+
+
+def get_mock_profile_label(profile_key: str) -> str:
+    """Return the human-readable label for one simulated student profile."""
+    profile_details = PROMPTS_PROFILES.get(profile_key)
+    if profile_details and isinstance(profile_details.get("label"), str):
+        return cast(str, profile_details["label"])
+    return profile_key
+
+
+def render_mock_generation_mode(tp_names: list[str]) -> None:
+    """Render the AI workflow used to generate and save simulated student submissions."""
+    st.title("Générateur de Copies Simulées")
+    st.write(
+        "Créez des rendus étudiants réalistes (code + compte-rendu Markdown) à partir d'un sujet existant, pour vos tests de benchmark."
+    )
+
+    if not tp_names:
+        st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
+        return
+
+    selected_tp = st.sidebar.selectbox(
+        "Choisir le sujet de TP",
+        tp_names,
+        index=0,
+        key="mock_submission_selected_tp",
+    )
+
+    profile_labels = {
+        profile_key: f"**{profile_key}** - {profile_description}"
+        for profile_key, profile_description in MOCK_PROFILE_OPTIONS
+    }
+    selected_profile = st.radio(
+        "Choisir le profil d'étudiant à simuler",
+        options=[profile_key for profile_key, _ in MOCK_PROFILE_OPTIONS],
+        format_func=lambda profile_key: profile_labels.get(profile_key, profile_key),
+        horizontal=False,
+        key="mock_submission_selected_profile",
+    )
+
+    selected_model = st.sidebar.selectbox(
+        "Choisir le modèle Gemini",
+        MOCK_MODELS,
+        index=0,
+        key="mock_submission_selected_model",
+    )
+
+    subject_text = build_subject_text_for_mock_generation(selected_tp)
+    default_prompt = build_generation_prompt(subject_text=subject_text, profile_key=selected_profile)
+    prompt_editor_key = get_mock_prompt_editor_key(selected_tp, selected_profile)
+    if prompt_editor_key not in st.session_state:
+        st.session_state[prompt_editor_key] = default_prompt
+
+    with st.expander("4) Prompt envoyé à Gemini (*éditable avant génération*)", expanded=True):
+        st.text_area(
+            "Prompt de génération",
+            key=prompt_editor_key,
+            height=360,
+            help="Vous pouvez adapter ce prompt avant de lancer la génération.",
+        )
+
+    if st.button("""✨ Générer la "fausse" copie ✨""", width="stretch"):
+        prompt_to_send = st.session_state.get(prompt_editor_key, default_prompt)
+        if not isinstance(prompt_to_send, str) or not prompt_to_send.strip():
+            st.error("Le prompt est vide. Merci de renseigner un prompt avant de lancer la génération.")
+        else:
+            with st.spinner("Génération de la copie simulée en cours via Gemini..."):
+                try:
+                    response_text = call_gemini_api(prompt=prompt_to_send, model_name=selected_model)
+                    extracted_files = extract_files_from_markdown(response_text)
+                except Exception as exc:
+                    st.error(f"Échec de la génération : {exc}")
+                else:
+                    st.session_state[get_mock_generation_data_key()] = {
+                        "tp_name": selected_tp,
+                        "profile_key": selected_profile,
+                        "model_name": selected_model,
+                        "prompt": prompt_to_send,
+                        "response_text": response_text,
+                        "files": extracted_files,
+                    }
+                    st.session_state[get_mock_overwrite_confirmation_key(selected_tp, selected_profile)] = False
+
+    generated_data = st.session_state.get(get_mock_generation_data_key())
+    if not isinstance(generated_data, dict):
+        st.info("Aucune copie simulée n'a encore été générée pendant cette session.")
+        return
+
+    generated_tp = generated_data.get("tp_name")
+    generated_profile = generated_data.get("profile_key")
+    generated_model = generated_data.get("model_name")
+    generated_files = generated_data.get("files")
+    raw_response = generated_data.get("response_text")
+
+    if not isinstance(generated_tp, str) or not isinstance(generated_profile, str) or not isinstance(generated_files, dict):
+        st.warning("Le cache de génération courant est invalide. Relancez une génération.")
+        return
+
+    destination_dir = SUBMISSIONS_DIR / generated_tp / generated_profile
+    st.subheader("Prévisualisation des fichiers générés")
+    st.caption(f"Profil simulé: {get_mock_profile_label(generated_profile)}")
+    if isinstance(generated_model, str):
+        st.caption(f"Modèle utilisé: {generated_model}")
+    st.caption(f"Chemin de destination: {destination_dir}")
+
+    extracted_file_items = [(name, content) for name, content in generated_files.items() if isinstance(name, str) and isinstance(content, str)]
+    if not extracted_file_items:
+        st.warning("Aucun fichier exploitable n'a été extrait de la réponse Gemini.")
+        return
+
+    if len(extracted_file_items) == 2:
+        left_col, right_col = st.columns(2)
+        left_filename, left_content = extracted_file_items[1]
+        right_filename, right_content = extracted_file_items[0]
+
+        with left_col:
+            left_tab, = st.tabs([f"📓 Fichier généré : `{left_filename}`"])
+            with left_tab:
+                left_language = detect_language(Path(left_filename))
+                with st.container(height=680):
+                    if left_language == "markdown":
+                        st.markdown(left_content)
+                    else:
+                        st.code(left_content, language=left_language, line_numbers=True, wrap_lines=True)
+
+        with right_col:
+            right_tab, = st.tabs([f"📔 Fichier généré : `{right_filename}`"])
+            with right_tab:
+                right_language = detect_language(Path(right_filename))
+                with st.container(height=680):
+                    if right_language == "markdown":
+                        st.markdown(right_content)
+                    else:
+                        st.code(right_content, language=right_language, line_numbers=True, wrap_lines=True)
+    else:
+        with st.container(height=680):
+            for filename, content in extracted_file_items:
+                language = detect_language(Path(filename))
+                with st.expander(f"Fichier généré : `{filename}`", expanded=True, icon="📄"):
+                    if language == 'markdown':
+                        st.markdown(content)
+                    else:
+                        st.code(content, language=language, line_numbers=True, wrap_lines=True)
+
+    if isinstance(raw_response, str):
+        with st.expander("Afficher la réponse brute Gemini"):
+            with st.container(height=320):
+                st.write(raw_response)
+
+    conflicts = [filename for filename, _ in extracted_file_items if (destination_dir / filename).exists()]
+    overwrite_confirmation_key = get_mock_overwrite_confirmation_key(generated_tp, generated_profile)
+    overwrite_confirmed_once = bool(st.session_state.get(overwrite_confirmation_key, False))
+
+    if conflicts:
+        st.warning(
+            "Des fichiers existent déjà dans la destination et seraient écrasés : "
+            + ", ".join(f"`{name}`" for name in conflicts)
+        )
+
+    if not conflicts:
+        if st.button("💾 Enregistrer la copie", width="stretch"):
+            try:
+                saved_paths = save_mock_submission(str(destination_dir), dict(extracted_file_items))
+            except Exception as exc:
+                st.error(f"Échec de la sauvegarde : {exc}")
+            else:
+                st.success("Copie simulée enregistrée avec succès.")
+                for saved_path in saved_paths:
+                    st.write(f"- {saved_path}")
+                discover_student_dirs.clear()
+                discover_all_student_names.clear()
+                read_text_file.clear()
+    else:
+        if not overwrite_confirmed_once:
+            if st.button("⚠️ Je confirme vouloir écraser les fichiers existants", width="stretch"):
+                st.session_state[overwrite_confirmation_key] = True
+                st.rerun()
+        else:
+            st.error("Confirmation d'écrasement active : une seconde confirmation est requise pour enregistrer.")
+            if st.button("💾 Confirmer définitivement l'écrasement et enregistrer", width="stretch"):
+                try:
+                    saved_paths = save_mock_submission(str(destination_dir), dict(extracted_file_items))
+                except Exception as exc:
+                    st.error(f"Échec de la sauvegarde : {exc}")
+                else:
+                    st.session_state[overwrite_confirmation_key] = False
+                    st.success("Copie simulée enregistrée après double confirmation d'écrasement.")
+                    for saved_path in saved_paths:
+                        st.write(f"- {saved_path}")
+                    discover_student_dirs.clear()
+                    discover_all_student_names.clear()
+                    read_text_file.clear()
+
+
 # Rendering helpers split the UI by workflow so each mode stays readable.
 
 
@@ -2033,6 +2318,8 @@ def render_pdf(path: Path, height: int = 720) -> None:
 
 def detect_language(path: Path) -> str:
     """Map supported source file extensions to Streamlit syntax highlighters."""
+    if path.suffix in [".md", ".markdown"]:
+        return "markdown"
     if path.suffix in [".c", ".h", ".cpp", ".hpp"]:
         return "c"
     if path.suffix in [".ml", ".mli", ".mll", ".mly"]:
@@ -2562,7 +2849,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
                 )
             elif not test_source_path.exists():
                 st.warning(
-                    "Aucun fichier `test_code_rendu.c` n'est encore présent dans `criterion_tests/`. Préparez d'abord ce banc de tests dans le mode « 2.b - Génération IA de tests C » ou ajoutez-le manuellement."
+                    "Aucun fichier `test_code_rendu.c` n'est encore présent dans `criterion_tests/`. Préparez d'abord ce banc de tests dans le mode « 3.b - Génération IA de tests C » ou ajoutez-le manuellement."
                 )
             elif not makefile_path.exists():
                 st.warning(
@@ -3018,10 +3305,11 @@ def render_documentation_mode() -> None:
         """
         1. Choisir le mode `1 - Barème` pour préparer le barème d'un TP.
         2. Vérifier le sujet affiché à gauche, puis renseigner ou essayer de générer un barème automatiquement (par appel à un LLM/AI) pour découvrir et noter les questions, et aussi calculer leurs points.
-        3. Passer au mode `2.a - Génération automatisée de tests OCaml` pour préparer un banc de tests pour le langage OCaml (avec Dune/Alcotest/QCheck).
-        4. Ou bien, passer au mode `2.b - Génération automatisée de tests C` pour préparer un banc de tests pour le langage C (avec Criterion).
-        5. Passer au mode `3 - Évaluation des rendus` pour noter un étudiant question par question.
-        6. Sauvegarder les notes, puis consulter les synthèses dans les modes `4` (vue de la classe par TP) et `5` (progression annuelle individuelle).
+        3. (Optionnel) Passer au mode `2 - Générateur de Copies Simulées` pour créer des rendus synthétiques de benchmark.
+        4. Passer au mode `3.a - Génération automatisée de tests OCaml` pour préparer un banc de tests pour le langage OCaml (avec Dune/Alcotest/QCheck).
+        5. Ou bien, passer au mode `3.b - Génération automatisée de tests C` pour préparer un banc de tests pour le langage C (avec Criterion).
+        6. Passer au mode `4 - Évaluation des rendus` pour noter un étudiant question par question.
+        7. Sauvegarder les notes, puis consulter les synthèses dans les modes `5` (vue de la classe par TP) et `6` (progression annuelle individuelle).
         """
     )
 
@@ -3036,23 +3324,27 @@ def render_documentation_mode() -> None:
             "Usage": "Définir le nombre de questions, leurs libellés, leurs points et sauvegarder le `bareme.json` du TP.",
         },
         {
-            "Mode": "2.a - Génération IA de tests OCaml",
+            "Mode": "2 - Générateur de Copies Simulées",
+            "Usage": "Générer des rendus étudiants synthétiques (code + Markdown) à partir d'un sujet, puis les sauvegarder dans `rendus-des-etudiants/<tp>/<profil>/`.",
+        },
+        {
+            "Mode": "3.a - Génération IA de tests OCaml",
             "Usage": "Créer un banc de tests OCaml (avec Dune/Alcotest/QCheck) si aucun `test_code_rendu.ml` n'est encore présent.",
         },
         {
-            "Mode": "2.b - Génération IA de tests C",
+            "Mode": "3.b - Génération IA de tests C",
             "Usage": "Créer un banc de tests C (avec Criterion) si aucun `test_code_rendu.c` n'est encore présent.",
         },
         {
-            "Mode": "3 - Évaluation des rendus",
+            "Mode": "4 - Évaluation des rendus",
             "Usage": "Ouvrir un rendu étudiant, lire son code et son rapport, puis saisir ou pré-remplir la notation avant sauvegarde.",
         },
         {
-            "Mode": "4 - Vue de la classe par TP",
+            "Mode": "5 - Vue de la classe par TP",
             "Usage": "Consulter les statistiques globales d'un TP à partir des `notes.json` déjà sauvegardés.",
         },
         {
-            "Mode": "5 - Progression annuelle individuelle",
+            "Mode": "6 - Progression annuelle individuelle",
             "Usage": "Suivre un étudiant sur l'ensemble des TP déjà évalués durant l'année.",
         },
     ]
@@ -3093,10 +3385,11 @@ def render_documentation_mode() -> None:
         st.markdown(
             f"""
             - Le mode `1 - Barème` peut proposer un barème automatique à partir du sujet et de ses sources.
-            - Les modes `2.a - Génération IA de tests OCaml` et `2.b - Génération IA de tests C` peuvent générer automatiquement des bans de test, s'il n'existent pas encore, à partir des sources du sujet, et du barème généré ou mis au point.
-            - Le mode `3 - Évaluation des rendus` peut proposer une notation automatique à partir du sujet, du barème, du code et du compte-rendu.
-            - Les modes `1` et `3` injectent leur proposition IA dans l'éditeur courant, puis restent modifiables avant sauvegarde.
-            - Les modes `2.a` et `2.b` écrivent directement une batterie de test (`test_code_rendu.ml` dans `dune_tests/`, ou `test_code_rendu.c` dans `criterion_tests/`), si la génération est demandée et si elle est réussie.
+            - Le mode `2 - Générateur de Copies Simulées` peut produire des rendus de benchmark par profil (`MOCK_20_20`, `MOCK_12_20`, `MOCK_05_20`) et les sauvegarder après confirmation explicite.
+            - Les modes `3.a - Génération IA de tests OCaml` et `3.b - Génération IA de tests C` peuvent générer automatiquement des bancs de test, s'il n'existent pas encore, à partir des sources du sujet, et du barème généré ou mis au point.
+            - Le mode `4 - Évaluation des rendus` peut proposer une notation automatique à partir du sujet, du barème, du code et du compte-rendu.
+            - Les modes `1` et `4` injectent leur proposition IA dans l'éditeur courant, puis restent modifiables avant sauvegarde.
+            - Les modes `3.a` et `3.b` écrivent directement une batterie de test (`test_code_rendu.ml` dans `dune_tests/`, ou `test_code_rendu.c` dans `criterion_tests/`), si la génération est demandée et si elle est réussie.
             - À propos de ces requêtes AI : {help_credits_llm}
             """
         )
@@ -3142,19 +3435,21 @@ def main() -> None:
     elif selected_mode == "1 - Barème":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut rédiger son barème", tp_names)
         render_bareme_mode(selected_tp)
-    elif selected_mode == "2.a - Génération IA de tests OCaml":
+    elif selected_mode == "2 - Générateur de Copies Simulées":
+        render_mock_generation_mode(tp_names)
+    elif selected_mode == "3.a - Génération IA de tests OCaml":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut générer les tests OCaml", tp_names)
         render_ocaml_tests_generation_mode(selected_tp)
-    elif selected_mode == "2.b - Génération IA de tests C":
+    elif selected_mode == "3.b - Génération IA de tests C":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut générer les tests C", tp_names)
         render_c_tests_generation_mode(selected_tp)
-    elif selected_mode == "3 - Évaluation des rendus":
+    elif selected_mode == "4 - Évaluation des rendus":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut évaluer les documents rendus par la classe", tp_names)
         render_submissions_mode(selected_tp)
-    elif selected_mode == "4 - Vue de la classe par TP":
+    elif selected_mode == "5 - Vue de la classe par TP":
         selected_tp = st.sidebar.selectbox("Choisir un TP pour lequel il faut visualiser les performances de la classe", tp_names)
         render_classroom_mode(selected_tp)
-    elif selected_mode == "5 - Progression annuelle individuelle":
+    elif selected_mode == "6 - Progression annuelle individuelle":
         render_individual_progress_mode()
     else:
         render_placeholder_mode("TODO: TP à sélectionner", selected_mode)
