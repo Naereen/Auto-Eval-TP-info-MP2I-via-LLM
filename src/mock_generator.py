@@ -104,7 +104,9 @@ def extract_files_from_markdown(response_text: str) -> dict[str, str]:
         return {"compte_rendu.md": response_text.strip() + "\n"}
 
     files: dict[str, str] = {}
-    unnamed_index = 1
+    # Unnamed blocks are accumulated and merged into a single compte_rendu.md
+    # instead of being split across compte_rendu.md, code_rendu_2.txt, etc.
+    unnamed_parts: list[str] = []
 
     for match_index, match in enumerate(matches, start=1):
         header = (match.group(1) or "").strip()
@@ -115,11 +117,8 @@ def extract_files_from_markdown(response_text: str) -> dict[str, str]:
             filename = _extract_filename_from_content(content)
 
         if filename is None:
-            if unnamed_index == 1 and "compte_rendu.md" not in files:
-                filename = "compte_rendu.md"
-            else:
-                filename = f"code_rendu_{unnamed_index}.txt"
-            unnamed_index += 1
+            unnamed_parts.append(content.rstrip())
+            continue
 
         filename = _sanitize_relative_filename(filename, match_index)
         deduplicated_name = filename
@@ -131,6 +130,13 @@ def extract_files_from_markdown(response_text: str) -> dict[str, str]:
             suffix_counter += 1
 
         files[deduplicated_name] = content.rstrip() + "\n"
+
+    if unnamed_parts:
+        merged = "\n\n".join(unnamed_parts) + "\n"
+        if "compte_rendu.md" in files:
+            files["compte_rendu.md"] = files["compte_rendu.md"].rstrip() + "\n\n" + merged
+        else:
+            files["compte_rendu.md"] = merged
 
     if not files:
         return {"compte_rendu.md": response_text.strip() + "\n"}

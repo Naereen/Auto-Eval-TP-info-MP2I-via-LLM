@@ -65,8 +65,10 @@ nsjail --config ./nsjail_config.cfg -- ./test_c.exe
 ## Générer automatiquement (au moins) trois fausses réponses simulées, pour un TP donné
 
 - [x] Prototype du générateur de copies simulées livré dans le mode `2 - Générateur de Copies Simulées`.
-- [ ] Ajouter davantage de profils de simulation (au-delà de `20_20`, `12_20`, `05_20`).
-- [ ] Ajouter un mode de génération par lot (N copies par profil) avec suffixes de dossiers pour éviter les collisions.
+- [ ] Ajouter davantage de profils de simulation (au-delà de `20_20`, `12_20`, `05_20`) ? Pas besoin je pense.
+- [ ] Ajouter un mode de génération par lot (N copies par profil) avec suffixes de dossiers pour éviter les collisions ? Pas besoin je pense.
+
+- [x] Si le compte rendu est obtenu comme une succession de plusieurs fichiers textes (probablement parce que l'IA Gemini a généré plusieurs plus petits blocs de code au lieu d'un seul plus gros), il faudrait les fusionner en UN SEUL fichier `compte_rendu.md` et ne pas utiliser `compte_rendu_1.txt`, `compte_rendu_2.txt`, etc.
 
 ----
 

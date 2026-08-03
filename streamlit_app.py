@@ -2217,7 +2217,14 @@ def get_mock_profile_label(profile_key: str) -> str:
 
 def render_mock_generation_mode(tp_names: list[str]) -> None:
     """Render the AI workflow used to generate and save simulated student submissions."""
-    selected_tp = tp_names[0]  # Default selection
+
+    selected_tp = st.sidebar.selectbox(
+        """Choisir un sujet de TP pour lequel on veut générer des copies simulées de "faux" étudiants""",
+        tp_names,
+        index=0,
+        key="mock_submission_selected_tp",
+    )
+
     st.title(f"Générateur de copies simulées - `{selected_tp}`")
     st.write(
         "Créez des rendus étudiants réalistes (code + compte-rendu Markdown) à partir d'un sujet existant, pour vos tests de benchmark."
@@ -2226,13 +2233,6 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
     if not tp_names:
         st.error("Aucun TP n'a été trouvé dans le dossier des sujets.")
         return
-
-    selected_tp = st.sidebar.selectbox(
-        """Choisir un sujet de TP pour lequel on veut générer des copies simulées de "faux" étudiants""",
-        tp_names,
-        index=0,
-        key="mock_submission_selected_tp",
-    )
 
     selected_model = st.sidebar.selectbox(
         "Choisir le modèle Gemini, pour la génération de copies simulées par appel ✨ IA / LLM ✨ (PRO plus cher que Flash)",
@@ -2314,10 +2314,10 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
 
     destination_dir = SUBMISSIONS_DIR / generated_tp / generated_profile
     st.subheader("Prévisualisation des fichiers générés")
-    st.write(f"Profil simulé: {get_mock_profile_label(generated_profile)}")
+    st.write(f"- Profil simulé : {get_mock_profile_label(generated_profile)}")
     if isinstance(generated_model, str):
-        st.write(f"Modèle utilisé: {generated_model}")
-    st.write(f"Chemin de destination: {destination_dir}")
+        st.write(f"- Modèle utilisé : {generated_model}")
+    st.write(f"- Chemin de destination : {destination_dir}")
 
     extracted_file_items = [(name, content) for name, content in generated_files.items() if isinstance(name, str) and isinstance(content, str)]
     if not extracted_file_items:
@@ -2374,7 +2374,7 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
         )
 
     if not conflicts:
-        if st.button("💾 Enregistrer la copie", width="stretch"):
+        if st.button("""💾 Enregistrer les documents générés pour cette "fausse" copie (`{selected_profile}`)""", width="stretch"):
             try:
                 saved_paths = save_mock_submission(str(destination_dir), dict(extracted_file_items))
             except Exception as exc:
@@ -3244,7 +3244,7 @@ def render_classroom_mode(tp_name: str) -> None:
     if pending_count:
         pending_preview = ", ".join(str(name) for name in pending_students[:8])
         suffix = "..." if pending_count > 8 else ""
-        st.info(f"{pending_count} rendu(x) restent sans `notes.json` pour ce TP : {pending_preview}{suffix}")
+        st.warning(f"{pending_count} rendu(s) restent sans `notes.json` pour ce TP : {pending_preview}{suffix}")
 
     chart_col_left, chart_col_right = st.columns((1.15, 1), gap="large")
     with chart_col_left:
