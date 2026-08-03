@@ -10,6 +10,7 @@ associated report when available.
 from __future__ import annotations
 
 import base64
+from io import StringIO
 import json
 import html as html_lib
 import os
@@ -396,13 +397,32 @@ def slugify_for_filename(value: str) -> str:
 
 
 def run_command_and_capture_output(
-    command: Sequence[str | Path], cwd: Path, log_path: Path, input_path=None, timeout=60
+    command: Sequence[str | Path],
+    cwd: Path,
+    log_path: Path,
+    input_path=None,
+    input_text: str | None = None,
+    timeout=60,
 ) -> tuple[int, str]:
     """Run one command safely, save its combined output, and return the exit code plus output."""
     try:
         command_parts = [str(part) for part in command]
         input_file = None
-        if input_path:
+        if input_text is not None:
+            input_stream = StringIO(input_text)
+            completed = subprocess.run(
+                command_parts,
+                cwd=cwd,
+                check=False,
+                input=input_stream.getvalue(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=timeout,
+            )
+            output = normalize_output_piece(completed.stdout)
+            exit_code = completed.returncode
+        elif input_path:
             with open(input_path, "r") as input_file:
                 completed = subprocess.run(
                     command_parts,
@@ -445,7 +465,12 @@ def run_command_and_capture_output(
 
 
 def run_nsjail_command_and_capture_output(
-    command: Sequence[str | Path], cwd: Path, log_path: Path, input_path=None, timeout=60
+    command: Sequence[str | Path],
+    cwd: Path,
+    log_path: Path,
+    input_path=None,
+    input_text: str | None = None,
+    timeout=60,
 ) -> tuple[int, str]:
     """Run one command through NsJail, save its output, and return the exit code plus output."""
     command_parts = [str(part) for part in command]
@@ -470,7 +495,12 @@ def run_nsjail_command_and_capture_output(
     ]
     nsjail_command.extend(command_parts)
     return run_command_and_capture_output(
-        nsjail_command, cwd=cwd, log_path=log_path, input_path=input_path, timeout=timeout
+        nsjail_command,
+        cwd=cwd,
+        log_path=log_path,
+        input_path=input_path,
+        input_text=input_text,
+        timeout=timeout,
     )
 
 
@@ -1131,11 +1161,14 @@ def interpret_ocaml_submission_in_nsjail(
 ) -> tuple[int, Path, str]:
     """Interpret one OCaml submission and persist the interpreter output."""
     log_path = get_ocaml_interpret_log_path(student_dir)
+    # Feed OCaml with a #use directive so the file is interpreted as an explicit command.
+    escaped_code_path = str(code_path).replace("\\", "\\\\").replace('"', '\\"')
+    use_directive = f"#use \"{escaped_code_path}\";;\n"
     exit_code, output = run_nsjail_command_and_capture_output(
-        [str(OCAML_INTERPRETER_PATH), "-color", "never"],
+        [str(OCAML_INTERPRETER_PATH), "-noinit", "-no-version", "-color", "never"],
         cwd=student_dir,
         log_path=log_path,
-        input_path=code_path,
+        input_text=use_directive,
     )
     return exit_code, log_path, output
 
@@ -3104,6 +3137,9 @@ def render_classroom_mode(tp_name: str) -> None:
         st.warning("Aucun barème n'est disponible pour ce TP. Commencez par renseigner le mode « 1 - Barème ».")
         return
 
+    with st.expander("📓 Afficher le sujet du TP pour contextualiser la vue de classe"):
+        render_subject_panel(tp_name)
+
     classroom_stats = build_classroom_statistics(tp_name, bareme_questions)
     evaluated_count = get_classroom_int(classroom_stats, "evaluated_count")
     if evaluated_count == 0:
@@ -3130,7 +3166,7 @@ def render_classroom_mode(tp_name: str) -> None:
     second_row_3.metric("Note maximale", f"{notes_summary['max']}/20")
     second_row_4.metric("Moyenne en points", f"{totals_summary['mean']} pts")
 
-    st.caption(
+    st.write(
         f"Les statistiques ci-dessous portent sur {evaluated_count} rendu{'s' if evaluated_count > 1 else ''} déjà noté{'s' if evaluated_count > 1 else ''}."
     )
     if pending_count:
@@ -3182,9 +3218,6 @@ def render_classroom_mode(tp_name: str) -> None:
     st.subheader("Statistiques détaillées par question")
     if per_question_rows:
         st.dataframe(per_question_rows, width='stretch', hide_index=True)
-
-    with st.expander("Afficher le sujet du TP pour contextualiser la vue de classe"):
-        render_subject_panel(tp_name)
 
 
 def render_individual_progress_mode() -> None:
