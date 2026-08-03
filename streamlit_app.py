@@ -2111,7 +2111,7 @@ def get_mock_profile_label(profile_key: str) -> str:
 
 def render_mock_generation_mode(tp_names: list[str]) -> None:
     """Render the AI workflow used to generate and save simulated student submissions."""
-    st.title("Générateur de Copies Simulées")
+    st.title("Générateur de copies simulées")
     st.write(
         "Créez des rendus étudiants réalistes (code + compte-rendu Markdown) à partir d'un sujet existant, pour vos tests de benchmark."
     )

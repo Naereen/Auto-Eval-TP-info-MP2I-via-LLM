@@ -12,7 +12,7 @@ Ce dépôt contient un dashboard Streamlit destiné à aider un enseignant à :
 - parcourir les sujets de TP disponibles ;
 - consulter les rendus étudiants, pour un TP donné ;
 - construire un barème par TP (à la main ou par un appel à une IA / LLM) ;
-- générer des rendus étudiants simulés (code + compte-rendu) par profils de niveau pour les benchmarks (trois profils par défaut : correction parfaite qui mérite un 20/20, élève au niveau correct qui mérite un 12/20, et rendu insuffissant qui mérite un 05/20) ;
+- générer des rendus étudiants simulés (code + compte-rendu) par profils de niveau pour les benchmarks (trois profils par défaut : correction parfaite qui mérite un 20/20, élève au niveau correct qui mérite un 12/20, et rendu insuffisant qui mérite un 05/20) ;
 - générer automatiquement un banc de tests OCaml quand aucun `test_code_rendu.ml` n'est encore présent - idem pour le langage C ;
 - saisir ou pré-remplir une notation, par étudiant par TP (ou la générer par IA/LLM) ;
 - sauvegarder les évaluations ;
@@ -72,9 +72,9 @@ Le mode **1 - Barème** permet de :
 ![documentation-mode-1-conception-barème-assisté-par-IA-1.png](./documentation-screenshots/documentation-mode-1-conception-barème-assisté-par-IA-1.png)
 ![documentation-mode-1-conception-barème-assisté-par-IA-3.png](./documentation-screenshots/documentation-mode-1-conception-barème-assisté-par-IA-3.png)
 
-### Mode `2 - Générateur de Copies Simulées`
+### Mode `2 - Génération de copies simulées`
 
-Le mode **2 - Générateur de Copies Simulées** permet de :
+Le mode **2 - Génération de copies simulées** permet de :
 
 - sélectionner un TP existant dans le dépôt ;
 - choisir un profil étudiant cible parmi `20_20`, `12_20`, `05_20` ;
@@ -193,7 +193,7 @@ Le mode **6 - Progression annuelle individuelle** permet de :
 
 - `rendus-des-etudiants/<tp>/<rendu>/notes.json` : notation normalisée d'un rendu étudiant. Cf. [cet exemple si besoin](rendus-des-etudiants/03-types-polymorphes-etc-ocaml/ETUDIANT1_Etudiant1/notes.json) (généré semi-automatiquement par IA via Google Gemini, depuis le dashboard aussi !) ;
 
-- `rendus-des-etudiants/<tp>/<profil>/` : rendus synthétiques générés par le mode `2 - Générateur de Copies Simulées` (exemples de profils : `20_20`, `12_20`, `05_20`) ;
+- `rendus-des-etudiants/<tp>/<profil>/` : rendus synthétiques générés par le mode `2 - Génération de copies simulées` (exemples de profils : `20_20`, `12_20`, `05_20`) ;
 
 - `rendus-des-etudiants/<tp>/dune_tests/test_code_rendu.ml` : fichier de tests OCaml généré ou entretenu par le mode `3.a - Génération automatisée de tests OCaml` ;
 - `rendus-des-etudiants/<tp>/criterion_tests/test_code_rendu.c` et `rendus-des-etudiants/<tp>/criterion_tests/Makefile` : banc de tests C / Criterion généré ou entretenu par le mode `3.b - Génération automatisée de tests C` ;
