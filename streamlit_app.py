@@ -60,6 +60,7 @@ OCAML_EXEC_LOG_FILENAME: Final[str] = "exec_code_rendu.log"
 OCAML_TEST_LOG_FILENAME: Final[str] = "test_code_rendu.log"
 OCAML_TEST_JSON_FILENAME: Final[str] = "test_code_rendu.json"
 OCAML_TEST_HTML_FILENAME: Final[str] = "test_code_rendu.html"
+OCAML_TEST_STUB_FILENAME: Final[str] = "code_rendu_stub.ml"
 
 CRITERION_TESTS_DIR: Final[str] = "criterion_tests"
 C_COMPILE_LOG_FILENAME: Final[str] = "gcc_code_rendu.log"
@@ -592,6 +593,11 @@ def get_ocaml_test_source_path(tp_name: str) -> Path:
     return get_ocaml_tests_dir(tp_name) / "test_code_rendu.ml"
 
 
+def get_ocaml_test_stub_path(tp_name: str) -> Path:
+    """Return the path of the OCaml stub source file used to tolerate missing symbols."""
+    return get_ocaml_tests_dir(tp_name) / OCAML_TEST_STUB_FILENAME
+
+
 def get_ocaml_test_generation_llm_response_key(tp_name: str) -> str:
     """Return the session key used to store the last AI-generated OCaml test suite response."""
     return f"ocaml_tests_llm_response::{tp_name}"
@@ -645,6 +651,17 @@ def save_generated_ocaml_tests(tp_name: str, source_code: str) -> Path:
     test_path.write_text(source_code.rstrip() + "\n", encoding="utf-8")
     read_text_file.clear()
     return test_path
+
+
+def save_generated_ocaml_stub(tp_name: str, source_code: str) -> Path:
+    """Persist an OCaml stub file used to provide placeholders for missing student symbols."""
+    tests_dir = get_ocaml_tests_dir(tp_name)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+
+    stub_path = get_ocaml_test_stub_path(tp_name)
+    stub_path.write_text(source_code.rstrip() + "\n", encoding="utf-8")
+    read_text_file.clear()
+    return stub_path
 
 
 def get_c_tests_dir(tp_name: str) -> Path:
@@ -911,6 +928,7 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
     bareme_path = get_bareme_path(tp_name)
     tests_dir = get_ocaml_tests_dir(tp_name)
     test_source_path = get_ocaml_test_source_path(tp_name)
+    stub_source_path = get_ocaml_test_stub_path(tp_name)
     test_suite_exists = ocaml_test_suite_is_present(tp_name)
     overwrite_authorization_key = get_ocaml_test_overwrite_authorization_key(tp_name)
     overwrite_is_authorized = bool(st.session_state.get(overwrite_authorization_key, False))
@@ -971,6 +989,10 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
                 with st.expander("Afficher le fichier de tests existant"):
                     with st.container(height=520):
                         st.code(read_text_file(str(test_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
+            if stub_source_path.exists():
+                with st.expander("Afficher le fichier de stubs existant"):
+                    with st.container(height=420):
+                        st.code(read_text_file(str(stub_source_path)), language="ocaml", line_numbers=True, wrap_lines=True)
 
         missing_files = [filename for filename in ("dune", "dune-project", "test_code_rendu.ml") if not (tests_dir / filename).exists()]
         if missing_files:
@@ -1008,15 +1030,28 @@ Je te donne :
 - le sujet du TP, avec ses sources LaTeX ou Markdown,
 - le barème JSON courant du sujet.
 
-Je veux que tu génères le fichier OCaml complet `test_code_rendu.ml` pour un banc de tests dans le contexte d'un projet `Dune`.
+Je veux que tu génères DEUX fichiers OCaml dans le contexte d'un projet `Dune` :
+- `test_code_rendu.ml` : la batterie de tests complète ;
+- `code_rendu_stub.ml` : des stubs pour toutes les valeurs/fonctions attendues, avec des implémentations minimales qui échouent proprement (par exemple via `failwith "TODO: implement this!"`).
 
 Contraintes impératives :
-- ne renvoie QUE le code source OCaml final, sans verbiage inutile ni explication, sans Markdown, sans bloc de code ;
+- renvoie les DEUX fichiers dans des blocs Markdown distincts, chacun précédé d'un en-tête de nom de fichier, par exemple :
+    ```ocaml
+    (* fichier: test_code_rendu.ml *)
+    ...
+    ```
+    et
+    ```ocaml
+    (* fichier: code_rendu_stub.ml *)
+    ...
+    ```
+- ne renvoie aucun texte hors de ces blocs ;
 - le fichier doit être compatible avec le framework de test composé de `dune`, `alcotest` plus `qcheck`, et `qcheck-alcotest` ;
 - le module principal à tester s'appelle `Code_rendu` et sera importé comme `module CR = Code_rendu` ;
 - écris à la fois des tests unitaires (avec Alcotest) et des tests de propriétés (avec QCheck), quand c'est pertinent ;
 - privilégie des helpers lisibles, des assertions explicites et des générateurs QCheck robustes ;
 - si l'API exacte n'est pas entièrement déductible, construis BEAUCOUP de tests génériques utiles à partir du sujet et des exemples présents ;
+- dans `code_rendu_stub.ml`, définis des symboles plausibles pour le sujet, suffisamment pour que des manques côté étudiant déclenchent des échecs de tests plutôt qu'un plantage immédiat de compilation ;
 {overwrite_instruction}
 
 Le résultat doit constituer un banc de TRÈS NOMBREUX tests sérieux, vraiment très complet, qui soit aussi pédagogique et directement exploitable, sans erreur de compilation ou autre problème.
@@ -1047,13 +1082,29 @@ Le résultat doit constituer un banc de TRÈS NOMBREUX tests sérieux, vraiment 
                 )
 
             st.session_state[get_ocaml_test_generation_llm_response_key(tp_name)] = response
-            generated_tests = strip_llm_code_fences(response)
-            if generated_tests is None:
+            response_text: str = response if isinstance(response, str) else ""
+            generated_files = extract_files_from_markdown(response_text)
+            test_source = generated_files.get("test_code_rendu.ml")
+            stub_source = generated_files.get("code_rendu_stub.ml")
+
+            if not isinstance(test_source, str) or not test_source.strip():
+                # Fallback for legacy outputs containing a single raw code payload.
+                test_source = strip_llm_code_fences(response_text)
+
+            if not isinstance(test_source, str) or not test_source.strip():
                 st.error("La réponse de l'IA n'a pas pu être convertie en fichier de tests OCaml exploitable.")
             else:
-                test_path = save_generated_ocaml_tests(tp_name, generated_tests)
+                default_stub = """(* fichier: code_rendu_stub.ml *)
+(* Placeholder stubs generated locally because the LLM did not provide one. *)
+let __missing_symbol__ () = failwith \"TODO: implement this!\"
+"""
+                stub_to_save = stub_source if isinstance(stub_source, str) and stub_source.strip() else default_stub
+                test_path = save_generated_ocaml_tests(tp_name, test_source)
+                stub_path = save_generated_ocaml_stub(tp_name, stub_to_save)
                 st.session_state[overwrite_authorization_key] = False
-                st.success(f"Le fichier de tests a été généré et sauvegardé dans `{test_path.name}`.")
+                st.success(
+                    f"Les fichiers OCaml ont été générés et sauvegardés : `{test_path.name}` et `{stub_path.name}`."
+                )
                 st.rerun()
 
         generation_llm_response_key = get_ocaml_test_generation_llm_response_key(tp_name)
@@ -1277,12 +1328,23 @@ def render_tests_note_metric(metric_container, note_sur_20: float | None) -> Non
 def run_ocaml_dune_tests(
     tp_name: str, code_path: Path, json_mode: bool
 ) -> tuple[int, Path, Path, str]:
-    """Copy one OCaml submission into the shared dune tests and run them."""
+    """Compose stub + one OCaml submission into shared dune tests and run them."""
     tests_dir = get_ocaml_tests_dir(tp_name)
     tests_dir.mkdir(parents=True, exist_ok=True)
 
     dune_code_path = tests_dir / "code_rendu.ml"
-    shutil.copy2(code_path, dune_code_path)
+    student_code_text = read_text_file(str(code_path))
+    stub_code_path = get_ocaml_test_stub_path(tp_name)
+    stub_code_text = read_text_file(str(stub_code_path)) if stub_code_path.exists() else ""
+
+    composed_chunks: list[str] = []
+    if stub_code_text.strip():
+        composed_chunks.append("(* Auto-generated stubs loaded first to keep tests running when symbols are missing. *)")
+        composed_chunks.append(stub_code_text.rstrip())
+    composed_chunks.append("(* Student submission loaded after stubs. Student definitions override stub definitions when present. *)")
+    composed_chunks.append(student_code_text.rstrip())
+    dune_code_path.write_text("\n\n".join(composed_chunks).rstrip() + "\n", encoding="utf-8")
+    read_text_file.clear()
 
     log_path = get_ocaml_test_log_path(tp_name)
     artifact_path = get_ocaml_test_json_path(tp_name) if json_mode else get_ocaml_test_html_path(tp_name)
@@ -2108,10 +2170,10 @@ def build_subject_text_for_mock_generation(tp_name: str) -> str:
 
     if bareme_path.exists():
         try:
-            sections.append("Current barème JSON:")
+            sections.append("Barème JSON du TP :")
             sections.append(read_text_file(str(bareme_path)))
         except OSError:
-            sections.append("Current barème JSON could not be loaded.")
+            sections.append("Le barème JSON du TP n'a pas pu être chargé.")
 
     if markdown_files:
         for markdown_path in markdown_files:
@@ -2155,7 +2217,8 @@ def get_mock_profile_label(profile_key: str) -> str:
 
 def render_mock_generation_mode(tp_names: list[str]) -> None:
     """Render the AI workflow used to generate and save simulated student submissions."""
-    st.title("Générateur de copies simulées")
+    selected_tp = tp_names[0]  # Default selection
+    st.title(f"Générateur de copies simulées - `{selected_tp}`")
     st.write(
         "Créez des rendus étudiants réalistes (code + compte-rendu Markdown) à partir d'un sujet existant, pour vos tests de benchmark."
     )
@@ -2165,14 +2228,14 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
         return
 
     selected_tp = st.sidebar.selectbox(
-        "Choisir le sujet de TP",
+        """Choisir un sujet de TP pour lequel on veut générer des copies simulées de "faux" étudiants""",
         tp_names,
         index=0,
         key="mock_submission_selected_tp",
     )
 
     selected_model = st.sidebar.selectbox(
-        "Choisir le modèle Gemini",
+        "Choisir le modèle Gemini, pour la génération de copies simulées par appel ✨ IA / LLM ✨ (PRO plus cher que Flash)",
         MOCK_MODELS,
         index=0,
         key="mock_submission_selected_model",
@@ -2726,7 +2789,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
 
             updated_grades: list[int] = []
             updated_questions: list[GradedQuestion] = []
-            with st.container(height=720):
+            with st.container(height=660):
                 for question in bareme_questions:
                     question_index = get_question_index(question)
                     question_label = get_question_label(question)
@@ -3050,9 +3113,18 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
             st.write("Copier le rendu OCaml dans le banc de tests Dune partagé, puis lancer les tests (QCheck + Alcotest) préparés à la main.")
             test_button_key = f"ocaml_test_button::{tp_name}::{selected_student_name}"
             tests_dir = get_ocaml_tests_dir(tp_name)
+            stub_source_path = get_ocaml_test_stub_path(tp_name)
             if not tests_dir.exists():
                 st.info(
                     f"Le dossier partagé des tests est absent pour ce TP : {tests_dir}. Il sera créé automatiquement au premier lancement."
+                )
+            elif stub_source_path.exists():
+                st.info(
+                    f"Un fichier de stubs `{stub_source_path.name}` est présent : il sera chargé avant le rendu étudiant pour tolérer les symboles manquants pendant les tests complets."
+                )
+            else:
+                st.warning(
+                    "Aucun fichier de stubs OCaml n'est présent. Si le rendu étudiant manque des symboles attendus, certains tests peuvent échouer dès la compilation."
                 )
 
             if st.button("Lancer les tests (Dune)", key=test_button_key, type="primary", width='stretch'):
@@ -3343,8 +3415,8 @@ def render_documentation_mode() -> None:
     submission_count = sum(len(discover_student_dirs(tp_name)) for tp_name in tp_names)
 
     st.title("Documentation intégrée du dashboard")
-    st.caption(
-        "Cette page résume le fonctionnement de l'outil, l'ordre conseillé d'utilisation et les fichiers produits pendant l'évaluation."
+    st.write(
+        "Cette page résume le fonctionnement de l'outil, l'ordre conseillé d'utilisation et les fichiers produits pendant l'évaluation, ainsi que les petites fonctionnalités « ✨ IA / LLM ✨ » qui sont disponibles."
     )
 
     top_col_1, top_col_2, top_col_3 = st.columns(3)
@@ -3357,8 +3429,8 @@ def render_documentation_mode() -> None:
         """
         1. Choisir le mode `1 - Barème` pour préparer le barème d'un TP.
         2. Vérifier le sujet affiché à gauche, puis renseigner ou essayer de générer un barème automatiquement (par appel à un LLM/AI) pour découvrir et noter les questions, et aussi calculer leurs points.
-        3. (Optionnel) Passer au mode `2 - Générateur de Copies Simulées` pour créer des rendus synthétiques de benchmark.
-        4. Passer au mode `3.a - Génération automatisée de tests OCaml` pour préparer un banc de tests pour le langage OCaml (avec Dune/Alcotest/QCheck).
+        3. (Optionnel) Passer au mode `2 - Générateur de Copies Simulées` pour créer trois rendus synthétiques, de faux étudiants (benchmarks).
+        4. Passer au mode `3.a - Génération automatisée de tests OCaml` pour préparer un banc de tests pour le langage OCaml (avec Dune, Alcotest et QCheck).
         5. Ou bien, passer au mode `3.b - Génération automatisée de tests C` pour préparer un banc de tests pour le langage C (avec Criterion).
         6. Passer au mode `4 - Évaluation des rendus` pour noter un étudiant question par question.
         7. Sauvegarder les notes, puis consulter les synthèses dans les modes `5` (vue de la classe par TP) et `6` (progression annuelle individuelle).
@@ -3466,7 +3538,7 @@ def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
 def main() -> None:
     """Build the Streamlit interface and wire repository discovery to UI widgets."""
     st.set_page_config(
-        page_title="Évaluator TP MP2I @ Lycée Kléber (par Lilian BESSON)",
+        page_title="Évaluator TP info MP2I @ Lycée Kléber (par Lilian BESSON)",
         page_icon="📚",
         layout="wide",
         initial_sidebar_state="expanded",
