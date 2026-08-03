@@ -121,15 +121,15 @@ APP_MODES: Final[tuple[str, ...]] = (
 MOCK_PROFILE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     (
         "MOCK_20_20",
-        "20/20 (Excellent) : rendu complet, robuste, tests unitaires présents, complexités optimisées, assertions et zéro fuite mémoire.",
+        "**20/20 (Excellent)** : rendu complet, robuste, tests unitaires présents, complexités optimisées, assertions et zéro fuite mémoire.",
     ),
     (
         "MOCK_12_20",
-        "12/20 (Moyen) : début du TP solide, mais 2-3 dernières questions absentes ; code compilable avec quelques choix sous-optimaux.",
+        "**12/20 (Moyen)** : début du TP solide, mais 2-3 dernières questions absentes ; code compilable avec quelques choix sous-optimaux.",
     ),
     (
         "MOCK_05_20",
-        "05/20 (Faible) : seules les premières questions sont tentées ; code incomplet/naif mais compilable sans erreur de syntaxe.",
+        "**05/20 (Faible)** : seules les premières questions sont tentées ; code incomplet/naif mais compilable sans erreur de syntaxe.",
     ),
 )
 
@@ -767,7 +767,7 @@ def render_c_tests_generation_mode(tp_name: str) -> None:
     overwrite_is_authorized = bool(st.session_state.get(overwrite_authorization_key, False))
 
     st.title(f"Génération automatisée de tests C - `{tp_name}`")
-    st.caption(
+    st.write(
         "Mode de préparation du banc de tests Criterion partagé, avec génération assistée par IA du fichier `test_code_rendu.c` quand il n'existe pas encore."
     )
 
@@ -787,7 +787,7 @@ def render_c_tests_generation_mode(tp_name: str) -> None:
                 "Ce mode prépare le dossier `criterion_tests/` du TP courant et génère le fichier `test_code_rendu.c` lorsqu'il est absent."
             )
 
-        st.caption(f"Dossier cible : `{tests_dir}`")
+        st.write(f"Dossier cible : `{tests_dir}`")
         if test_suite_exists:
             st.success("Un fichier `test_code_rendu.c` existe déjà pour ce TP.")
             if overwrite_is_authorized:
@@ -934,7 +934,7 @@ def render_ocaml_tests_generation_mode(tp_name: str) -> None:
     overwrite_is_authorized = bool(st.session_state.get(overwrite_authorization_key, False))
 
     st.title(f"Génération automatisée de tests OCaml - `{tp_name}`")
-    st.caption(
+    st.write(
         "Mode de préparation du banc de tests Dune partagé, avec génération assistée par IA du fichier `test_code_rendu.ml` quand il n'existe pas encore."
     )
 
@@ -2245,7 +2245,7 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
         profile_key: f"**{profile_key}** - {profile_description}"
         for profile_key, profile_description in MOCK_PROFILE_OPTIONS
     }
-    selected_profile = st.radio(
+    selected_profile = st.sidebar.radio(
         "Choisir le profil d'étudiant à simuler",
         options=[profile_key for profile_key, _ in MOCK_PROFILE_OPTIONS],
         format_func=lambda profile_key: profile_labels.get(profile_key, profile_key),
@@ -2275,7 +2275,7 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
                 help="Vous pouvez adapter ce prompt avant de lancer la génération.",
             )
 
-    if st.button("""✨ Générer la "fausse" copie ✨""", width="stretch"):
+    if st.button(f"""✨ Générer la "fausse" copie (`{selected_profile}`) ✨""", width="stretch"):
         prompt_to_send = st.session_state.get(prompt_editor_key, default_prompt)
         if not isinstance(prompt_to_send, str) or not prompt_to_send.strip():
             st.error("Le prompt est vide. Merci de renseigner un prompt avant de lancer la génération.")
@@ -2314,10 +2314,10 @@ def render_mock_generation_mode(tp_names: list[str]) -> None:
 
     destination_dir = SUBMISSIONS_DIR / generated_tp / generated_profile
     st.subheader("Prévisualisation des fichiers générés")
-    st.caption(f"Profil simulé: {get_mock_profile_label(generated_profile)}")
+    st.write(f"Profil simulé: {get_mock_profile_label(generated_profile)}")
     if isinstance(generated_model, str):
-        st.caption(f"Modèle utilisé: {generated_model}")
-    st.caption(f"Chemin de destination: {destination_dir}")
+        st.write(f"Modèle utilisé: {generated_model}")
+    st.write(f"Chemin de destination: {destination_dir}")
 
     extracted_file_items = [(name, content) for name, content in generated_files.items() if isinstance(name, str) and isinstance(content, str)]
     if not extracted_file_items:
@@ -2468,7 +2468,7 @@ def render_bareme_mode(tp_name: str) -> None:
     """Render the marking scheme editor and persist it in the session state."""
 
     st.title(f"Rédaction du barème de notation - `{tp_name}`")
-    st.caption(
+    st.write(
         "Mode de préparation du barème du TP sélectionné, avec sauvegarde locale, rechargement et proposition assistée par IA."
     )
 
@@ -2581,7 +2581,7 @@ Renvoie uniquement un JSON sous cette forme (par exemple) :
         updated_questions: list[QuestionConfig] = []
         questions_container = st.container(height=550, border=True)
         with questions_container:
-            st.caption("Édition du barème par question")
+            st.write("Édition du barème par question")
             for question in questions:
                 question_index = get_question_index(question)
                 default_label = get_question_label(question)
@@ -2674,7 +2674,7 @@ def render_submissions_mode(tp_name: str) -> None:
     )
 
     st.title(f"Évaluation des rendus de TP - `{tp_name}`")
-    st.caption(
+    st.write(
         "Mode d'évaluation des rendus pour parcourir un sujet de TP, consulter les rendus et préparer l'évaluation automatique."
     )
     col_rendus, col_etudiant, col_total, col_note, col_tests_note = st.columns(5)
@@ -2893,7 +2893,7 @@ Ne renvoie aucune explication, aucun commentaire et aucun texte hors JSON.
 
     st.divider()
     st.subheader(f"Outils d'évaluation de code {'OCaml' if ocaml_detected else 'C'} semi-automatisé")
-    st.caption(
+    st.write(
         "Aucune action n'est lancée automatiquement : la compilation et l'exécution isolée dans [`NsJail`](https://nsjail.dev/), ou les batteries de test ne démarrent qu'après un clic explicite sur le bon bouton."
     )
 
@@ -3201,7 +3201,7 @@ def render_classroom_mode(tp_name: str) -> None:
     bareme_questions = get_bareme_questions(bareme_data)
 
     st.title(f"Vue de la classe par TP - `{tp_name}`")
-    st.caption(
+    st.write(
         "Tableau de bord de synthèse pour visualiser les notes déjà sauvegardées de toute la classe sur ce TP."
     )
 
@@ -3297,7 +3297,7 @@ def render_individual_progress_mode() -> None:
     student_names: list[str] = discover_all_student_names()
 
     st.title("Progression annuelle individuelle")
-    st.caption(
+    st.write(
         "Vue transversale pour suivre l'évolution d'un étudiant au fil des TP évalués pendant l'année."
     )
 
@@ -3414,7 +3414,7 @@ def render_documentation_mode() -> None:
     student_names = discover_all_student_names()
     submission_count = sum(len(discover_student_dirs(tp_name)) for tp_name in tp_names)
 
-    st.title("Documentation intégrée du dashboard")
+    st.title("🧾 Documentation intégrée du dashboard")
     st.write(
         "Cette page résume le fonctionnement de l'outil, l'ordre conseillé d'utilisation et les fichiers produits pendant l'évaluation, ainsi que les petites fonctionnalités « ✨ IA / LLM ✨ » qui sont disponibles."
     )
@@ -3528,7 +3528,7 @@ def render_documentation_mode() -> None:
 def render_placeholder_mode(tp_name: str, mode_name: str) -> None:
     """Render a placeholder for future dashboard modes that are not implemented yet."""
     st.title("Dashboard d'évaluation et de pilotage des TP")
-    st.caption("Cette vue est réservée aux prochains développements du dashboard.")
+    st.write("Cette vue est réservée aux prochains développements du dashboard.")
     col_mode, col_tp = st.columns(2)
     col_mode.metric("Mode", mode_name)
     col_tp.metric("TP", tp_name)
@@ -3580,13 +3580,13 @@ def main() -> None:
 
     st.sidebar.subheader("À propos de cet outil ?")
     st.sidebar.markdown("Vous avez des *idées* ? Un *bug* à signaler ? [Ouvrez un ticket sur GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM/issues/new) !")
-    st.sidebar.markdown("Ce dashboard utilise Python 3 et streamlit, et a été développé en avril 2026, par [Lilian BESSON](https://github.com/Naereen/) pour les TP de la MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [license libre MIT](https://lbesson.mit-license.org/).")
-    st.sidebar.caption("*Note* : les outils d'IA génératives ✨ [Google Gemini](https://gemini.google.com/) et [GitHub Copilot](https://github.com/copilot/) m'ont aidés à produire \"rapidement\" cette démo d'une idée de micro-logiciel.")
 
     if LOGO_LYCEE:
         st.sidebar.image(str(ROOT_DIR / LOGO_LYCEE), width=120)
 
-    st.sidebar.caption("Développé pour mes usages personnels, pour la MP2I au Lycée Kléber.")
+    st.sidebar.markdown("Ce dashboard utilise Python 3 et streamlit, et a été développé en avril 2026, par [Lilian BESSON](https://github.com/Naereen/) pour les TP de la MP2I au Lycée Kléber. Le code source est disponible sur [GitHub](https://github.com/Naereen/Auto-Eval-TP-info-MP2I-via-LLM), sous [license libre MIT](https://lbesson.mit-license.org/).")
+
+    st.sidebar.caption("*Note* : les outils d'IA génératives ✨ [Google Gemini](https://gemini.google.com/) et [GitHub Copilot](https://github.com/copilot/) m'ont aidés à produire \"rapidement\" cette démo d'une idée de micro-logiciel, qui a été développé pour satisfaire ma curiosité, et peut-être pour m'en servir en vrai (usage personnel uniquement), pour la [MP2I](https://cahier-de-prepa.fr/mp2i-kleber/docs?info) au [Lycée Kléber](https://lycee-kleber.com.fr/).")
     full_sha, short_sha, modification_date = get_current_git_commit()
     if full_sha and short_sha and modification_date:
         st.sidebar.caption(f"[Version git {short_sha}, modifié {modification_date}]({REPOSITORY_URL}/commit/{full_sha})")
